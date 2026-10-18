@@ -1,0 +1,7 @@
+global:
+  comfyui_base_path: H:\minzzj文件\技术部\项目\官方\Better comfyUI\.comfyui
+  comfyui_endpoint: http://127.0.0.1:8188
+prompt:
+  endpoint: https://api.deepseek.com
+  model_name: deepseek-chat
+  api_key: ''

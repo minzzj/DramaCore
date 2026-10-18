@@ -1,0 +1,37 @@
+# secrets / private
+config/user.yaml
+config/user.yml
+.env
+*.key
+secrets.*
+# local runtime data
+.comfyui/
+.comfyenv/
+projects/
+dist/
+logs/
+*.log
+# models / media / outputs
+*.safetensors
+*.ckpt
+*.pt
+*.pth
+*.gguf
+*.mp4
+*.mov
+*.wav
+*.mp3
+*.png
+*.jpg
+*.jpeg
+*.webp
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+node_modules/
+# internal
+docs/remote_evidence_4090/
+remote_reports/remote_pulled/
+保留备用的节点/
+文档/

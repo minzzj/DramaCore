@@ -1,0 +1,26 @@
+[
+  {
+    "id": "M001",
+    "file": "bettercomfyui/store/assets.py",
+    "old": "version = format_version(next_number)",
+    "new": "version = format_version(1)",
+    "test": "tests/verify/test_acceptance_05_version_and_hash.py",
+    "note": "验收 5：版本号必须递增（改成恒为 v1，追加版本测试必须变红）"
+  },
+  {
+    "id": "M002",
+    "file": "bettercomfyui/prompt/match.py",
+    "old": "MatchOutcome.NEW_GENERATE,",
+    "new": "MatchOutcome.EXISTS_REUSE,",
+    "test": "tests/verify/test_acceptance_03_injection_and_reuse.py",
+    "note": "验收 3：不存在必须 NEW_GENERATE（改成 EXISTS_REUSE，复用/新增分支测试必须变红）"
+  },
+  {
+    "id": "M003",
+    "file": "bettercomfyui/store/atomic.py",
+    "old": "return sorted(items, key=lambda item: json.dumps(item, sort_keys=True, ensure_ascii=False))",
+    "new": "return sorted(items, key=lambda item: json.dumps(item, sort_keys=False, ensure_ascii=False))",
+    "test": "tests/verify/test_contracts_parity.py",
+    "note": "C12：canonical_json 键序确定性（改坏排序，契约检查必须变红）"
+  }
+]

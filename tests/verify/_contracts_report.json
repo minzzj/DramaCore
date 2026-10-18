@@ -1,0 +1,431 @@
+{
+  "generated_at": "2026-10-18T16:58:57.241091+08:00",
+  "repo_root": "H:\\minzzj文件\\技术部\\项目\\官方\\Better comfyUI",
+  "package_revision": "80e4c84c36cfd3e1",
+  "totals": {
+    "BLOCKER": 0,
+    "MAJOR": 10,
+    "MINOR": 1,
+    "INFO": 8
+  },
+  "statuses": {
+    "PASS": 15,
+    "FAIL": 3,
+    "UNVERIFIED": 0,
+    "VACUOUS": 0
+  },
+  "checks": [
+    {
+      "id": "C1_LOCKSOURCE",
+      "title": "LockSource 取值 == 方案第七部分期望集合",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "expected": [
+          "FALLBACK_PASS",
+          "HUMAN_PASS",
+          "MODEL_PASS"
+        ],
+        "actual": [
+          "FALLBACK_PASS",
+          "HUMAN_PASS",
+          "MODEL_PASS"
+        ]
+      },
+      "findings": []
+    },
+    {
+      "id": "C1_SEGMENTSOURCE",
+      "title": "SegmentSource 取值 == 方案第七部分期望集合",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "expected": [
+          "CASCADE_FALLBACK",
+          "NORMAL",
+          "REGENERATED",
+          "REVIEW_FALLBACK"
+        ],
+        "actual": [
+          "CASCADE_FALLBACK",
+          "NORMAL",
+          "REGENERATED",
+          "REVIEW_FALLBACK"
+        ]
+      },
+      "findings": []
+    },
+    {
+      "id": "C1_REVIEWMODE",
+      "title": "ReviewMode 取值 == 方案第七部分期望集合",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "expected": [
+          "AUTO_SWITCHED",
+          "HUMAN",
+          "MODEL"
+        ],
+        "actual": [
+          "AUTO_SWITCHED",
+          "HUMAN",
+          "MODEL"
+        ]
+      },
+      "findings": []
+    },
+    {
+      "id": "C1_DEGRADEFLAG",
+      "title": "DegradeFlag 取值 == 方案第七部分期望集合",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "expected": [
+          "CASCADE_DEGRADED",
+          "FALLBACK_DEGRADED",
+          "FULL_REVIEW_DEGRADED",
+          "NONE"
+        ],
+        "actual": [
+          "CASCADE_DEGRADED",
+          "FALLBACK_DEGRADED",
+          "FULL_REVIEW_DEGRADED",
+          "NONE"
+        ]
+      },
+      "findings": []
+    },
+    {
+      "id": "C1_REVIEWSTATE",
+      "title": "ReviewState 取值 == 方案第七部分期望集合",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "expected": [
+          "ABORTED",
+          "ALLOWED",
+          "ARBITRATING",
+          "AWAITING_REVIEW",
+          "BLOCKED",
+          "CLASSIFYING",
+          "FAILED",
+          "FALLBACK",
+          "RECEIVED",
+          "SCANNING",
+          "TIMEOUT",
+          "VALIDATING"
+        ],
+        "actual": [
+          "ABORTED",
+          "ALLOWED",
+          "ARBITRATING",
+          "AWAITING_REVIEW",
+          "BLOCKED",
+          "CLASSIFYING",
+          "FAILED",
+          "FALLBACK",
+          "RECEIVED",
+          "SCANNING",
+          "TIMEOUT",
+          "VALIDATING"
+        ]
+      },
+      "findings": []
+    },
+    {
+      "id": "C3_TRANSITIONS",
+      "title": "状态转移表与方案第七部分六逐行一致",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "expected_rows": 22,
+        "actual_rows": 22,
+        "note": "事件名中文/英文映射无法自动比对，仅比对(状态,目标状态)多重集合与条数"
+      },
+      "findings": []
+    },
+    {
+      "id": "C4_NO_DUPLICATE_ENUMS",
+      "title": "除 models/enums.py 外不得自行定义枚举",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 63,
+        "root": "bettercomfyui/"
+      },
+      "findings": []
+    },
+    {
+      "id": "C5_FORBIDDEN_IMPORTS",
+      "title": "禁止的跨层 import（store/prompt/review/director/models）",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 48,
+        "rules": {
+          "store": [
+            "prompt",
+            "review",
+            "director",
+            "pipeline"
+          ],
+          "prompt": [
+            "review",
+            "director",
+            "pipeline"
+          ],
+          "review": [
+            "prompt",
+            "director",
+            "pipeline"
+          ],
+          "director": [
+            "pipeline"
+          ],
+          "models": [
+            "store",
+            "prompt",
+            "review",
+            "director",
+            "pipeline",
+            "executors"
+          ]
+        }
+      },
+      "findings": []
+    },
+    {
+      "id": "C5B_MATCH_NO_AI",
+      "title": "R1：prompt/match.py 不得依赖 AI 网关",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "target": "bettercomfyui/prompt/match.py"
+      },
+      "findings": []
+    },
+    {
+      "id": "C6_R2_NO_INPLACE_OVERWRITE",
+      "title": "R2 静态检查：不得原地覆盖素材文件",
+      "severity": "BLOCKER",
+      "status": "FAIL",
+      "coverage": {
+        "files_scanned": 64,
+        "allowlist": [
+          "bettercomfyui/store/atomic.py",
+          "bettercomfyui/store/lockfile.py"
+        ],
+        "note": "启发式：命中含 version/asset/file_path 等上下文的写操作；需人工确认"
+      },
+      "findings": [
+        {
+          "file": "bettercomfyui/cli.py",
+          "line": 606,
+          "message": "[MAJOR] write_text 会原地覆盖目标文件：target.write_text(（函数 cmd_config）",
+          "suggestion": "R2：素材只追加；新内容一律新版本目录，用 store.atomic.atomic_write_json"
+        },
+        {
+          "file": "bettercomfyui/logging_setup.py",
+          "line": 163,
+          "message": "[MAJOR] write_text 会原地覆盖目标文件：target.write_text(text + \"\\n\", encoding=\"utf-8\")（函数 export_config_json）",
+          "suggestion": "R2：素材只追加；新内容一律新版本目录，用 store.atomic.atomic_write_json"
+        }
+      ]
+    },
+    {
+      "id": "C7_META_JSON_LOCKED",
+      "title": "meta.json 更新必须走 locked_update_json",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 62
+      },
+      "findings": []
+    },
+    {
+      "id": "C8_NO_ABSOLUTE_PATHS",
+      "title": "不得硬编码绝对路径",
+      "severity": "MAJOR",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 64
+      },
+      "findings": []
+    },
+    {
+      "id": "C9_NO_SILENT_FAILURE",
+      "title": "不得静默吞异常（假成功温床；清理类为 INFO，领域异常吞掉为 MAJOR）",
+      "severity": "MAJOR",
+      "status": "FAIL",
+      "coverage": {
+        "files_scanned": 64,
+        "info_cleanup": 8,
+        "note": "INFO = 文件系统 best-effort 清理（Lead 裁定 2026-10-16）；MAJOR = 领域异常被吞后返回默认值"
+      },
+      "findings": [
+        {
+          "file": "bettercomfyui/cli.py",
+          "line": 355,
+          "message": "[MAJOR] 静默吞异常：except (ValueError, TypeError):",
+          "suggestion": "静默吞异常：任务书第 7 节要求不得静默失败；至少写 WARN 日志或按 ErrorClass 显式分类"
+        },
+        {
+          "file": "bettercomfyui/director/augment.py",
+          "line": 116,
+          "message": "[MAJOR] 静默吞异常：except (TypeError, ValueError):",
+          "suggestion": "静默吞异常：任务书第 7 节要求不得静默失败；至少写 WARN 日志或按 ErrorClass 显式分类"
+        },
+        {
+          "file": "bettercomfyui/executors/comfyui_http.py",
+          "line": 62,
+          "message": "[MAJOR] 异常后返回默认值（可能是假失败/假成功）：except OSError: -> return None（函数 read_comfyui_version）",
+          "suggestion": "若该返回值是授权门禁（如 resolve_lock 的 None），必须写 WARN 日志 + 保留 ErrorClass，让调用方能区分「未审核」与「读不出来」"
+        },
+        {
+          "file": "bettercomfyui/executors/comfyui_http.py",
+          "line": 476,
+          "message": "[MAJOR] 异常后返回默认值（可能是假失败/假成功）：except ExecutorError: -> return False（函数 cancel）",
+          "suggestion": "若该返回值是授权门禁（如 resolve_lock 的 None），必须写 WARN 日志 + 保留 ErrorClass，让调用方能区分「未审核」与「读不出来」"
+        },
+        {
+          "file": "bettercomfyui/executors/comfyui_http.py",
+          "line": 488,
+          "message": "[MAJOR] 异常后返回默认值（可能是假失败/假成功）：except ExecutorError: -> return None（函数 vram_snapshot）",
+          "suggestion": "若该返回值是授权门禁（如 resolve_lock 的 None），必须写 WARN 日志 + 保留 ErrorClass，让调用方能区分「未审核」与「读不出来」"
+        },
+        {
+          "file": "bettercomfyui/executors/comfyui_http.py",
+          "line": 499,
+          "message": "[MAJOR] 异常后返回默认值（可能是假失败/假成功）：except (TypeError, ValueError): -> return None（函数 vram_snapshot）",
+          "suggestion": "若该返回值是授权门禁（如 resolve_lock 的 None），必须写 WARN 日志 + 保留 ErrorClass，让调用方能区分「未审核」与「读不出来」"
+        },
+        {
+          "file": "bettercomfyui/pipeline/core.py",
+          "line": 103,
+          "message": "[MAJOR] 静默吞异常：except ValueError:",
+          "suggestion": "静默吞异常：任务书第 7 节要求不得静默失败；至少写 WARN 日志或按 ErrorClass 显式分类"
+        },
+        {
+          "file": "bettercomfyui/store/assets.py",
+          "line": 733,
+          "message": "[INFO] 清理类：except OSError:",
+          "suggestion": "best-effort 清理（临时文件/锁释放），不改变返回值语义 —— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/atomic.py",
+          "line": 165,
+          "message": "[MAJOR] 异常后返回默认值（可能是假失败/假成功）：except FileNotFoundError: -> return None（函数 _read_bytes_with_retry）",
+          "suggestion": "若该返回值是授权门禁（如 resolve_lock 的 None），必须写 WARN 日志 + 保留 ErrorClass，让调用方能区分「未审核」与「读不出来」"
+        },
+        {
+          "file": "bettercomfyui/store/atomic.py",
+          "line": 251,
+          "message": "[INFO] 清理类：except OSError:",
+          "suggestion": "best-effort 清理（临时文件/锁释放），不改变返回值语义 —— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/atomic.py",
+          "line": 296,
+          "message": "[INFO] 清理类：except FileExistsError:",
+          "suggestion": "best-effort 清理（临时文件/锁释放），不改变返回值语义 —— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/atomic.py",
+          "line": 316,
+          "message": "[INFO] 清理类：except OSError:",
+          "suggestion": "best-effort 清理（临时文件/锁释放），不改变返回值语义 —— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/lockfile.py",
+          "line": 96,
+          "message": "[INFO] 异常后返回默认值（可能是假失败/假成功）：except OSError: -> return False（函数 _try_os_lock）",
+          "suggestion": "best-effort 清理/探测（函数 _try_os_lock，捕获 ['OSError'] 后返回保守失败值）—— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/lockfile.py",
+          "line": 105,
+          "message": "[INFO] 清理类：except OSError:",
+          "suggestion": "best-effort 清理（临时文件/锁释放），不改变返回值语义 —— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/lockfile.py",
+          "line": 116,
+          "message": "[INFO] 异常后返回默认值（可能是假失败/假成功）：except OSError: -> return False（函数 _try_os_lock）",
+          "suggestion": "best-effort 清理/探测（函数 _try_os_lock，捕获 ['OSError'] 后返回保守失败值）—— 已按裁定降为 INFO"
+        },
+        {
+          "file": "bettercomfyui/store/lockfile.py",
+          "line": 124,
+          "message": "[INFO] 清理类：except OSError:",
+          "suggestion": "best-effort 清理（临时文件/锁释放），不改变返回值语义 —— 已按裁定降为 INFO"
+        }
+      ]
+    },
+    {
+      "id": "C10_NO_SILENT_MOCK_FALLBACK",
+      "title": "不得静默回退到 mock",
+      "severity": "BLOCKER",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 63
+      },
+      "findings": []
+    },
+    {
+      "id": "C11_ID_FORMATS",
+      "title": "标识符格式 == CONTRACTS.md 第 2 节",
+      "severity": "MAJOR",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "functions_checked": 9
+      },
+      "findings": []
+    },
+    {
+      "id": "C12_ATOMIC_JSON",
+      "title": "canonical_json 确定性 / NaN 拒绝 / 中文不转义",
+      "severity": "MAJOR",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1
+      },
+      "findings": []
+    },
+    {
+      "id": "C13_SEMANTICS",
+      "title": "枚举语义自洽（终态不得有质量重试出边；FAILED->RECEIVED 为方案允许的技术恢复例外）",
+      "severity": "MINOR",
+      "status": "PASS",
+      "coverage": {
+        "files_scanned": 1,
+        "allowed_exception": "FAILED -> RECEIVED（方案第七部分六 末行「技术恢复/重新提交」）"
+      },
+      "findings": []
+    },
+    {
+      "id": "C14_TEST_SLEEPS",
+      "title": "测试中避免长固定 sleep（flaky 风险）",
+      "severity": "MINOR",
+      "status": "FAIL",
+      "coverage": {
+        "files_scanned": 74
+      },
+      "findings": [
+        {
+          "file": "tests/test_comfyui_live_integration.py",
+          "line": 102,
+          "message": "固定 sleep 0.5s（并发/超时测试易 flaky）：time.sleep(0.5)",
+          "suggestion": "改用事件/条件轮询或假时钟"
+        }
+      ]
+    }
+  ]
+}
