@@ -625,12 +625,24 @@ class BetterComfyUIAssetReview:
                 return p if p.is_absolute() else None
 
         def model_review(material: dict) -> dict:
-            """本地启发式评分（真实像素统计）；语义维度如实跳过。"""
+            """本地启发式评分：画质/构图=像素统计；一致性=同素材上一LOCK版本相似度；
+            合规=确定性违禁词规则（非语义模型，缺参考/提示词时如实跳过）。"""
             file = _abs_path(material.get("file_path"))
             if file is None or not file.is_file():
                 raise review_mod.ReviewTechnicalError(
                     f"找不到素材文件，无法评分：{material.get('file_path')}")
-            scores, skipped = scorer_mod.image_scores(file)
+            asset_obj = assets.get_asset(aid) or {}
+            reference_path = None
+            for v in asset_obj.get("versions", []):
+                if v.get("version") == ver or v.get("lock_status") != "LOCKED":
+                    continue
+                cand = _abs_path(v.get("file_path"))
+                if cand is not None and cand.is_file():
+                    reference_path = cand
+                    break
+            prompt_text = str(asset_obj.get("note") or "")
+            scores, skipped = scorer_mod.image_scores(
+                file, reference_path=reference_path, prompt_text=prompt_text)
             avg = scorer_mod.score_average(scores)
             threshold = float(getattr(cfg.asset_review, "score_threshold", 70.0))
             return {
@@ -639,7 +651,7 @@ class BetterComfyUIAssetReview:
                 "scores": scores,
                 "skipped_dimensions": skipped,
                 "score_mode": "local_heuristic",
-                "note": "本地启发式只算真实可算的维度；一致性/合规需语义模型",
+                "note": "画质/构图=像素统计；一致性=参考版本相似度；合规=违禁词规则（非语义模型）",
             }
 
         counters, counter_path = self._counters(paths)

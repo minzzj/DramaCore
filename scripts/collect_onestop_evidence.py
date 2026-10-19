@@ -21,7 +21,7 @@
     - /data/BetterComfyUI/projects/<project_id>/output/*.mp4   （只列大小，不下载视频）
     - /data/BetterComfyUI/remote_reports/*.json、/root/BetterComfyUI/remote_reports/*.json
     - 远端环境：SSH 端口 22（凭据在 bcu_remote 同目录 env 文件）；
-      ComfyUI 外网 http://your-gpu-host:8188（旧 8188 已不再服务 ComfyUI）
+      ComfyUI 外网 os.environ.get("BCU_REMOTE_BASE", "http://YOUR-GPU-HOST:8188")（旧 8188 已不再服务 ComfyUI）
 
 输出
     - remote_reports/onestop_summary.json   统一结构（机器可读）
@@ -2568,7 +2568,7 @@ def build_markdown(summary: dict[str, Any], round42: bool = False) -> str:
             "并对比修复前 v1=137/v2=138/ROUND46旧=126 帧。修复原因：导演台 "
             "`exportMode=\"segments\"` 只回部分帧 → 改 `exportMode=\"all\"`（P0-4 修复说明，Lead 提供）。",
             "- **运行环境**：远端 RTX 4090；SSH 端口 **22**；ComfyUI 外网 "
-            "**http://your-gpu-host:8188**（旧 8188 已不再服务 ComfyUI，旧地址仅历史记录）。",
+            "**os.environ.get("BCU_REMOTE_BASE", "http://YOUR-GPU-HOST:8188")**（旧 8188 已不再服务 ComfyUI，旧地址仅历史记录）。",
             "- 匹配规则：优先 project_id；其次成片字节数唯一匹配远端 output；文档表按耗时数值匹配；"
             "无法唯一定位的一律独立列条并在「匹配依据」里说明，不强行合并。",
             "",

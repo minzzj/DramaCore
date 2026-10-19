@@ -25,7 +25,7 @@ from __future__ import annotations
 import logging
 import traceback
 
-__version__ = "0.1.0-internal"
+__version__ = "0.1.1-internal"
 
 logger = logging.getLogger("bettercomfyui.comfy")
 if not logger.handlers:

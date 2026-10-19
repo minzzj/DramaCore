@@ -180,6 +180,12 @@ def config_from_dict(data: dict | None) -> Config:
         )
     cfg = Config(**kwargs)
     _cross_validate(cfg)
+    # ROUND53：prompt.normalize_names 接线（此前该配置字段未被任何代码读取）
+    try:
+        from .prompt.normalize import set_normalize_enabled
+        set_normalize_enabled(bool(getattr(cfg.prompt, "normalize_names", True)))
+    except Exception:  # noqa: BLE001 - 接线失败不影响主流程
+        pass
     return cfg
 
 

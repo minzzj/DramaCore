@@ -59,23 +59,10 @@ SKIP_PATHS = {
 #: ⚠️ 这是**欠债清单**，不是"可接受清单"。
 #: 能接上就接上并删条目；新加配置项若确实由别层承担，必须在此登记原因。
 KNOWN_UNWIRED: dict[str, str] = {
-    # ---- 设计上由别层承担 ----
-    # ROUND27：assets.sampler / assets.batch_count 已由「素材生成·取任务」
-    # （BetterComfyUIAssetGen）真实读取并输出到生成参数 JSON，故从本清单移除。
-    # ---- 行为已硬编码，开关没接 ----
-    "asset_review.retry_interval": "重试间隔固定为「立即」；开关未接",
-    "video_review.regenerate_granularity": "硬编码为「只重做该段」；开关未接",
-    "global_.checkpoint_every_stage": "检查点无条件保存；开关未接（行为本身符合要求）",
-    "prompt.normalize_names": "名称归一化**行为**处处在用（normalize_name），但开关本身未接",
-    # ---- 真缺口（未修）----
-    # 已修并移除（ROUND19）：
-    #   assets.per_class_limit、assets.resolution、encode.audio_join、
-    #   global_.log_level、global_.log_all_manual_and_auto_switch、
-    #   global_.config_import_export、asset_review.score_dimensions（见 KNOWN_UNDETECTABLE 说明）
-    # ROUND20 已接线并移除：
-    #   director.save_vram_all（VramPhaseScheduler.from_config）
-    #   global_.task_timeout_s（SegmentGenerator.rework_timeout_s + 轮询看门狗）
-    #   global_.comfyui_endpoint（resolve_comfyui_endpoint + CLI doctor HTTP 探测）
+    # ROUND53：此前 4 项已知欠债已全部接线（见 normalize.py / config.py / one_stop helpers）：
+    #   prompt.normalize_names / asset_review.retry_interval /
+    #   video_review.regenerate_granularity / global_.checkpoint_every_stage
+    # 当前无已知未接线配置项；新增欠债必须在此登记并写明原因。
 }
 
 #: **已知漏报**：确实是「配了不用」，但裸词扫描**检测不到**。

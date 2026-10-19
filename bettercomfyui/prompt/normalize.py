@@ -30,6 +30,8 @@ from typing import Any, Iterable, Sequence
 
 __all__ = [
     "normalize_name",
+    "set_normalize_enabled",
+    "normalize_enabled",
     "is_suspect",
     "similarity",
     "variant_key",
@@ -43,6 +45,23 @@ __all__ = [
 
 #: 不动点迭代上限。正常情况下 2~3 轮即收敛；上限只是防御性护栏。
 _MAX_PASSES = 8
+
+#: prompt.normalize_names 开关（由 config.load_config 注入；False 时只做最小清理）。
+_NORMALIZE_ENABLED = True
+
+
+def set_normalize_enabled(value: bool) -> None:
+    """config.prompt.normalize_names 接线入口（False=不折叠/不猜别名，只 trim）。
+
+    ROUND53：由 config.load_config() 在加载后调用，使 normalize_names 配置真正生效。
+    """
+    global _NORMALIZE_ENABLED
+    _NORMALIZE_ENABLED = bool(value)
+
+
+def normalize_enabled() -> bool:
+    return bool(_NORMALIZE_ENABLED)
+
 
 #: 需要显式删除的零宽 / 不可见字符（``str.isspace()`` 不覆盖它们）。
 _ZERO_WIDTH = frozenset("\u200b\u200c\u200d\u2060\ufeff\u180e\u00ad")
@@ -125,6 +144,9 @@ def normalize_name(name: str) -> str:
         raise TypeError(f"normalize_name 只接受 str，收到 {type(name).__name__}：{name!r}")
     if not name:
         return ""
+    if not _NORMALIZE_ENABLED:
+        # 配置关闭归一化：不猜别名/不折叠标点，仅做最小空白清理（行为可预期）
+        return " ".join(name.strip().split())
     text = name
     for _ in range(_MAX_PASSES):
         nxt = _step(text)

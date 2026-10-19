@@ -159,11 +159,71 @@ def _map_image_dims(metrics: dict[str, float]) -> dict[str, float]:
     return {"画质": round(clamp(quality), 3), "构图": round(clamp(composition), 3)}
 
 
-def image_scores(path: Path | str) -> tuple[dict[str, float], list[str]]:
+def _consistency_vs_reference(reference_path: Path, rgb: Any) -> float | None:
+    """一致性：与同素材上一 LOCK 版本的灰度直方图+边缘相关性（确定性像素统计）。"""
+    try:
+        import numpy as np
+        from PIL import Image
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        with Image.open(reference_path) as ref:
+            ref_rgb = ref.convert("RGB")
+            if max(ref_rgb.size) > 256:
+                ratio = 256.0 / max(ref_rgb.size)
+                ref_rgb = ref_rgb.resize((max(1, int(ref_rgb.size[0] * ratio)),
+                                          max(1, int(ref_rgb.size[1] * ratio))))
+            ref_arr = np.asarray(ref_rgb, dtype=np.float64)
+    except Exception:  # noqa: BLE001
+        return None
+    cur = rgb
+    if max(cur.size) > 256:
+        ratio = 256.0 / max(cur.size)
+        cur = cur.resize((max(1, int(cur.size[0] * ratio)), max(1, int(cur.size[1] * ratio))))
+    cur_arr = np.asarray(cur, dtype=np.float64)
+    h = min(ref_arr.shape[0], cur_arr.shape[0])
+    w = min(ref_arr.shape[1], cur_arr.shape[1])
+    if h < 8 or w < 8:
+        return None
+    a = ref_arr[:h, :w].mean(axis=2)
+    b = cur_arr[:h, :w].mean(axis=2)
+    # 灰度直方图相关系数
+    ha, _ = np.histogram(a, bins=64, range=(0, 255))
+    hb, _ = np.histogram(b, bins=64, range=(0, 255))
+    denom = float(np.linalg.norm(ha) * np.linalg.norm(hb))
+    hist_corr = float(np.dot(ha, hb) / denom) if denom > 1e-9 else 0.0
+    # 梯度结构相关性
+    ga = np.abs(np.gradient(a)[0]) + np.abs(np.gradient(a)[1])
+    gb = np.abs(np.gradient(b)[0]) + np.abs(np.gradient(b)[1])
+    gd = float(np.linalg.norm(ga) * np.linalg.norm(gb))
+    edge_corr = float(np.dot(ga.ravel(), gb.ravel()) / gd) if gd > 1e-9 else 0.0
+    score = 100.0 * max(0.0, 0.6 * hist_corr + 0.4 * edge_corr)
+    return round(clamp(score), 3)
+
+
+#: 合规规则（确定性文本规则，不是语义模型）：命中扣分并写明命中词。
+_COMPLIANCE_BANNED = (
+    "色情", "裸露", "暴力", "血腥", "恐怖主义", "政治敏感", "毒品", "赌博",
+    "未成年", "虐杀", "仇恨", "枪击",
+)
+
+
+def _compliance_rule_score(prompt_text: str) -> float | None:
+    text = str(prompt_text or "").strip()
+    if not text:
+        return None
+    hits = [w for w in _COMPLIANCE_BANNED if w in text]
+    return round(clamp(100.0 - 25.0 * len(hits)), 3)
+
+
+def image_scores(path: Path | str, *, reference_path: Path | str | None = None,
+                 prompt_text: str = "") -> tuple[dict[str, float], list[str]]:
     """对一张素材图做本地启发式评分。
 
-    返回 ``(scores, skipped_dimensions)``。只返回**能真实计算**的维度；
-    「一致性/合规」这类需要语义模型/参考图的维度会进入 skipped，由调用方如实展示。
+    返回 ``(scores, skipped_dimensions)``：
+    - 画质/构图：真实像素统计；
+    - 一致性：传了同素材上一 LOCK 版本时按直方图+边缘相关性计算（无参考则跳过）；
+    - 合规：传了素材提示词时按确定性违禁词规则计算（非语义模型；无提示词则跳过）。
     """
     path = Path(path)
     if not path.is_file():
@@ -185,6 +245,13 @@ def image_scores(path: Path | str) -> tuple[dict[str, float], list[str]]:
     except Exception as exc:  # noqa: BLE001
         raise LocalScorerError(f"图像解码失败（{path.name}）：{type(exc).__name__}: {exc}") from exc
     scores = _map_image_dims(metrics)
+    if reference_path:
+        cons = _consistency_vs_reference(Path(reference_path), rgb)
+        if cons is not None:
+            scores["一致性"] = cons
+    comp = _compliance_rule_score(prompt_text)
+    if comp is not None:
+        scores["合规"] = comp
     skipped = [d for d in ("画质", "一致性", "合规", "构图") if d not in scores]
     if metrics["colorfulness"] < 2.0:
         scores["画质"] = round(clamp(scores["画质"] - 5.0), 3)

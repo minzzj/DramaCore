@@ -28,11 +28,13 @@
     python -B scripts/build_4090_workflow.py --remote-oi <远端快照> --local-oi <本地快照>
 
 快照怎么来（只读 curl）：
-    curl -s http://your-gpu-host:8188/object_info -o remote_oi.json
+    curl -s os.environ.get("BCU_REMOTE_BASE", "http://YOUR-GPU-HOST:8188")/object_info -o remote_oi.json
     curl -s http://127.0.0.1:8188/object_info      -o local_oi.json
 """
 
 from __future__ import annotations
+
+import os
 
 import argparse
 import copy
@@ -355,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         import urllib.request
         remote = json.load(urllib.request.urlopen(
-            "http://your-gpu-host:8188/object_info", timeout=60))
+            "os.environ.get("BCU_REMOTE_BASE", "http://YOUR-GPU-HOST:8188")/object_info", timeout=60))
     local = {}
     if args.local_oi:
         local = json.loads(Path(args.local_oi).read_text(encoding="utf-8"))

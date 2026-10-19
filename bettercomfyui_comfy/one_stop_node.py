@@ -569,7 +569,7 @@ class BetterComfyUIOneStop:
                 "生成素材图": ("BOOLEAN", {"default": True,
                                           "tooltip": "True = 节点内部生成素材参考图并走审核 LOCK；"
                                                      "False = 只用提示词出片（无参考图）"}),
-                "素材最多生成个数": ("INT", {"default": 3, "min": 0, "max": 9}),
+                "素材最多生成个数": ("INT", {"default": 4, "min": 0, "max": 9}),
                 "素材审核轮数": ("INT", {"default": 3, "min": 1, "max": 10,
                                         "tooltip": "同一素材最多生成几个候选版本送审（CNT1）；"
                                                    "达上限按规范从候选里选最高分兜底 FALLBACK 并 LOCK。"}),
@@ -601,7 +601,7 @@ class BetterComfyUIOneStop:
                 "参考音频路径": ("STRING", {"default": "",
                                             "tooltip": "r2v 参考音频（<Audio 1>）绝对路径，可选"}),
                 # ---------------- C. 生成尺寸/采样 ----------------
-                "每段时长_秒": ("FLOAT", {"default": 5.167, "min": 1.0, "max": 30.0, "step": 0.1}),
+                "每段时长_秒": ("FLOAT", {"default": 10.0, "min": 1.0, "max": 30.0, "step": 0.1}),
                 "段数": ("INT", {"default": 1, "min": 1, "max": 360,
                                   "tooltip": "显式段数；与「目标总时长_分钟」取较大者（上限 360 段≈1 小时@10s）"}),
                 "目标总时长_分钟": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 180.0,
@@ -614,8 +614,8 @@ class BetterComfyUIOneStop:
                 "批次间卸载模型": ("BOOLEAN", {"default": True,
                                                "tooltip": "每批结束 unload 模型+清 CUDA 缓存（显存最省；每批多一次加载）"}),
                 "帧率": ("FLOAT", {"default": 24.0, "min": 8.0, "max": 60.0, "step": 0.01}),
-                "宽度": ("INT", {"default": 864, "min": 64, "max": 4096, "step": 32}),
-                "高度": ("INT", {"default": 480, "min": 64, "max": 4096, "step": 32}),
+                "宽度": ("INT", {"default": 1920, "min": 64, "max": 4096, "step": 32}),
+                "高度": ("INT", {"default": 1088, "min": 64, "max": 4096, "step": 32}),
                 "参考最长边": ("INT", {"default": 864, "min": 64, "max": 4096, "step": 32}),
                 "步数": ("INT", {"default": 6, "min": 1, "max": 200}),
                 "采样器": (_samplers(), {"default": "euler"}),
@@ -720,11 +720,11 @@ class BetterComfyUIOneStop:
                 "边界相似度阈值": ("FLOAT", {"default": 55.0, "min": 0.0, "max": 100.0, "step": 1.0}),
                 "自动返工": ("BOOLEAN", {"default": True,
                                           "tooltip": "SG5 U：段不过→自动重生成该段→重审（CNT2）；关闭则只输出需重生成清单"}),
-                "CNT2上限": ("INT", {"default": 1, "min": 1, "max": 5,
+                "CNT2上限": ("INT", {"default": 3, "min": 1, "max": 5,
                                        "tooltip": "每段质量返工上限（达上限取最高分候选，不假成功）"}),
                 "级联返工": ("BOOLEAN", {"default": True,
                                            "tooltip": "N1/CNT3：返工段的后一段重新生成并级联验证（上限 CNT3上限）"}),
-                "CNT3上限": ("INT", {"default": 1, "min": 0, "max": 5}),
+                "CNT3上限": ("INT", {"default": 3, "min": 0, "max": 5}),
             },
             "optional": {
                 "api_key": ("STRING", {"default": ""}),
@@ -904,11 +904,13 @@ class BetterComfyUIOneStop:
 
         try:
             _cfg = load_config(repo_root=self._repo_root())
+            self._cfg = _cfg
             _panel_key = str(getattr(_cfg.prompt, "system_prompt_template", "") or "")
             _panel_lang = str(getattr(_cfg.prompt, "output_language", "") or "中文")
             _panel_gran = str(getattr(_cfg.prompt, "story_granularity", "") or "按镜头")
         except Exception as exc:  # noqa: BLE001 - 读配置失败要写审计，不静默
             _panel_key, _panel_lang, _panel_gran = "", "中文", "按镜头"
+            self._cfg = None
             warnings.append(f"读取面板默认提示词配置失败（已用内置默认）：{type(exc).__name__}: {exc}")
         if str(系统提示词选择).startswith("跟随"):
             _sys_label = next(
@@ -958,6 +960,13 @@ class BetterComfyUIOneStop:
             project_id or "（无）", 项目 or "（无）", project_context.get("manifest_injected"),
             project_context.get("library")))
         audit.append("E1–E5 素材提示词数量：" + json.dumps(asset_type_counts, ensure_ascii=False))
+        self._stage_checkpoint(project_dir, "prompts", {
+            "mode": payload.get("meta", {}).get("mode"),
+            "api_calls": project_context.get("api_calls"),
+            "assets_by_type": asset_type_counts,
+            "video_prompts": len(video_prompts),
+            "project": 项目,
+        }, audit)
         audit.append(f"段数：{len(video_prompts)} / 每段 {每段时长_秒}s / {宽度}x{高度}@{帧率}fps")
         audit.extend(line for line in str(everything_audit).splitlines() if line.strip())
 
@@ -1036,6 +1045,12 @@ class BetterComfyUIOneStop:
                 f"构图={ (row.get('scores') or {}).get('构图') }"
             )
         vram_after_assets = _vram_peak()
+        self._stage_checkpoint(project_dir, "assets", {
+            "review_summary": asset_report.get("review_summary") or {},
+            "locked": len(asset_report.get("locked") or []),
+            "assets": asset_report.get("assets") or [],
+            "vram_after_assets": vram_after_assets,
+        }, audit)
 
         # ---- 3) 构造完整 timeline_data（全功能导演台入参）----
         task_type = str(任务类型 or _default_task_type())
@@ -1179,6 +1194,12 @@ class BetterComfyUIOneStop:
             f"/{tl_summary['output'].get('continuityOverlapFrames')}f"
             f"({tl_summary['output'].get('continuityMode')}) 音轨={tl_summary['output'].get('audioMode')}"
         )
+
+        self._stage_checkpoint(project_dir, "timeline", {
+            "timeline_summary": tl_summary,
+            "continuity": cont_ev if "cont_ev" in dir() else {},
+            "segment_count": seg_count,
+        }, audit)
 
         # ---- 4) 可选包（SelfLift/Refine/FaceRefine/SemanticBridge）内部生成 ----
         packs = {
@@ -1350,6 +1371,12 @@ class BetterComfyUIOneStop:
                                "fallback": "splice_segments+copy"}
         meta = _parse_media(final_path)
         vram_after_encode = _vram_peak()
+        self._stage_checkpoint(project_dir, "encode", {
+            "final_path": str(final_path),
+            "meta": meta,
+            "finalize": {k: v for k, v in finalize_report.items() if k not in ("audit",)},
+            "vram_after_encode": vram_after_encode,
+        }, audit)
 
         # ---- 7) 段级 R_seg + 整片 R_full 审核（tuple 解析已修复）----
         # 完整性：导演台会按 H3 帧网格取整（如 5.167s → 141 帧），不能用计划秒数硬比；
@@ -1423,6 +1450,13 @@ class BetterComfyUIOneStop:
 
         # ---- 8) 报告落盘 + ComfyUI 预览导出 ----
         duration_expected = len(prompts) * float(每段时长_秒)
+        self._stage_checkpoint(project_dir, "review", {
+            "integrity": integrity,
+            "quality": quality,
+            "video_review": {k: video_review.get(k) for k in (
+                "verdict", "segment_scores", "full_review", "need_regenerate_segments",
+                "rework_rounds", "cnt2", "cnt3")},
+        }, audit)
         report_obj = {
             "node": "BetterComfyUIOneStop",
             "node_version": "v0.5-review-data-context",
@@ -1829,6 +1863,10 @@ class BetterComfyUIOneStop:
                     "policy": {}, "seg_files": list(seg_files),
                     "note": "时间轴JSON 覆盖模式不分段规格：自动返工需按时段规格重建时间轴，"
                             "该模式不自动返工（只输出 R_seg 需重生成清单，如实记录）"}
+        _gran = str(getattr(getattr(getattr(self, "_cfg", None), "video_review", None),
+                            "regenerate_granularity", "segment") or "segment")
+        if _gran not in ("segment", "full"):
+            _gran = "segment"
         result = {"enabled": bool(ctx["自动返工"]),
                   "cnt2": [0] * total, "cnt3": [0] * total,
                   "rounds": [], "fallback": [], "regen_files": {},
@@ -1836,7 +1874,7 @@ class BetterComfyUIOneStop:
                   "policy": {"cnt2_limit": int(ctx["CNT2上限"]),
                              "cnt3_limit": int(ctx["CNT3上限"]),
                              "max_cascade_depth": 1},
-                  "seg_files": list(seg_files)}
+                  "seg_files": list(seg_files), "granularity": _gran}
         if not ctx["自动返工"]:
             result["note"] = "自动返工=关闭：只输出需重生成清单（CNT2/CNT3 不触发）"
             return result
@@ -1861,6 +1899,10 @@ class BetterComfyUIOneStop:
                          f"需重生成段={need or '无'}")
             if not need:
                 break
+            if _gran == "full":
+                audit.append("返工粒度=full（video_review.regenerate_granularity）："
+                             "整片所有段全部重生成（不限于 R_seg 标记段）")
+                need = list(range(1, len(seg_files) + 1))
             if ctx.get("models") is None:
                 ctx["models"] = self._load_video_models(
                     ctx["视频UNET"], ctx["CLIP名"], ctx["视频VAE"], ctx["音频VAE"],
@@ -2106,6 +2148,84 @@ class BetterComfyUIOneStop:
         }
         return report
 
+    # ============================ ROUND53 helpers ============================
+    def _retry_interval_seconds(self) -> float:
+        """asset_review.retry_interval 接线：immediate→0.5s，数字字符串→秒（限 0.2~30s）。"""
+        cfg = getattr(self, "_cfg", None)
+        raw = str(getattr(getattr(cfg, "asset_review", None), "retry_interval", "immediate") or "immediate")
+        low = raw.strip().lower()
+        if low in ("immediate", "none", "0", ""):
+            return 0.5
+        try:
+            return max(0.2, min(float(raw), 30.0))
+        except (TypeError, ValueError):
+            return 0.5
+
+    def _stage_checkpoint(self, project_dir: Path, stage: str, data: dict,
+                          audit: list[str]) -> None:
+        """global_.checkpoint_every_stage 接线：每个阶段落一个检查点 JSON（失败不阻断）。"""
+        cfg = getattr(self, "_cfg", None)
+        enabled = bool(getattr(getattr(cfg, "global_", None), "checkpoint_every_stage", True))
+        if not enabled:
+            return
+        try:
+            d = Path(project_dir) / "_work"
+            d.mkdir(parents=True, exist_ok=True)
+            fp = d / f"stage_{stage}_{int(time.time())}.json"
+            fp.write_text(json.dumps({
+                "stage": stage,
+                "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "data": data,
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
+            audit.append(f"阶段检查点（{stage}）：{fp}")
+        except Exception as exc:  # noqa: BLE001 - 检查点失败不阻断主流程，但必须可见
+            audit.append(f"⚠️ 阶段检查点写入失败（{stage}）：{type(exc).__name__}: {exc}")
+
+    def _wait_human_asset_decision(self, *, project_dir: Path, asset_id: str, version: str,
+                                   name: str, png: Path | None,
+                                   audit: list[str], warnings: list[str]) -> dict:
+        """ROUND53 P0-3：真实人工审核等待（文件队列 + 超时切模型）。
+
+        人工操作方式：审批时在 `<项目>/review/asset_decision_<asset_id>_<version>.json`
+        写入 `{"approved": true|false, "operator": "xxx", "reason": "..."}`；
+        未在 `asset_review.human_timeout_minutes` 内给出结论 → 切模型审核（CNT1 从 0）。
+        """
+        cfg = getattr(self, "_cfg", None)
+        asset_cfg = getattr(cfg, "asset_review", None)
+        timeout_min = float(getattr(asset_cfg, "human_timeout_minutes", 10) or 10)
+        interval = self._retry_interval_seconds()
+        review_dir = Path(project_dir) / "review"
+        review_dir.mkdir(parents=True, exist_ok=True)
+        pending = review_dir / f"asset_pending_{asset_id}_{version}.json"
+        decision = review_dir / f"asset_decision_{asset_id}_{version}.json"
+        pending.write_text(json.dumps({
+            "asset_id": asset_id, "version": version, "name": name,
+            "png": str(png) if png else None,
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "instruction": "人工审批：写同目录 asset_decision_<asset_id>_<version>.json，"
+                           "内容 {\"approved\": true/false, \"operator\": \"...\", \"reason\": \"...\"}",
+            "timeout_minutes": timeout_min,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        audit.append(f"人工审核：等待审批文件 {pending}（超时 {timeout_min} 分钟→切模型；"
+                     f"轮询间隔 {interval}s）")
+        deadline = time.time() + max(0.0, timeout_min) * 60.0
+        while time.time() < deadline:
+            if decision.is_file():
+                try:
+                    data = json.loads(decision.read_text(encoding="utf-8"))
+                except Exception as exc:  # noqa: BLE001 - 文件坏不算通过
+                    warnings.append(f"⚠️ 人工审批文件解析失败（继续等待）：{type(exc).__name__}: {exc}")
+                    data = None
+                if isinstance(data, dict) and isinstance(data.get("approved"), bool):
+                    verdict = "通过" if data["approved"] else "拒绝"
+                    audit.append(f"人工审核：{verdict}（operator={data.get('operator') or '未署名'}；"
+                                 f"reason={data.get('reason') or '无'}；文件 {decision}）")
+                    return {"approved": bool(data["approved"])}
+                warnings.append("⚠️ 人工审批文件缺少布尔 approved 字段（按继续等待处理，不放行）")
+            time.sleep(interval)
+        audit.append(f"人工审核超时（{timeout_min} 分钟无结论）→ 自动切模型审核（CNT1 从 0）")
+        return {"approved": False, "forced_model": True}
+
     def _generate_and_review_assets(
         self, *, payload: dict, project_id: str, project_dir: Path, ckpt: str,
         limit: int, rounds: int, review_mode: str, review_threshold: int = -1,
@@ -2216,8 +2336,21 @@ class BetterComfyUIOneStop:
                     # ---- 素材审核（完整状态机：CNT1 / 唯一提交 / LOCK / FALLBACK）----
                     from .nodes import BetterComfyUIAssetReview
 
-                    action = ("人工通过" if str(review_mode).startswith("人工")
-                              else "模型审核（本地启发式）")
+                    forced_model = False
+                    if str(review_mode).startswith("人工"):
+                        decision = self._wait_human_asset_decision(
+                            project_dir=project_dir, asset_id=aid, version=ver,
+                            name=cand.get("name") or "", png=png,
+                            audit=audit, warnings=warnings)
+                        forced_model = bool(decision.get("forced_model"))
+                        action = "人工通过" if decision.get("approved") else "人工拒绝"
+                    else:
+                        action = "模型审核（本地启发式）"
+                    if forced_model:
+                        BetterComfyUIAssetReview().run(
+                            project_id=project_id, action="人工超时→切模型（强制）",
+                            asset_id=aid, version=ver)
+                        action = "模型审核（本地启发式）"
                     rev = BetterComfyUIAssetReview().run(
                         project_id=project_id, action=action, asset_id=aid, version=ver)
                     values = rev.get("result") or () if isinstance(rev, dict) else ()
@@ -2234,6 +2367,12 @@ class BetterComfyUIOneStop:
                     })
                     audit.append(f"  素材审核：{state} 评分={score} "
                                  f"{('画质/构图=' + str(scores)) if scores else ''}")
+                    if state == "BLOCKED" and rnd + 1 < int(rounds):
+                        _sleep_s = self._retry_interval_seconds()
+                        if _sleep_s > 0:
+                            audit.append(f"  素材审核：BLOCKED → 按 retry_interval 等待 {_sleep_s}s 再试"
+                                         f"（第 {rnd + 2}/{int(rounds)} 轮）")
+                            time.sleep(_sleep_s)
                     if state in ("ALLOWED", "FALLBACK"):
                         locked_ver = ver
                         break
