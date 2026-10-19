@@ -227,6 +227,9 @@ const CSS = `
 .dcdu-mask .dcdu-mask-lock { font-size:22px; line-height:1; }
 .dcdu-mask .dcdu-mask-unlock { cursor:pointer; box-shadow:0 2px 10px rgba(0,0,0,.45); }
 .dcdu-mask .dcdu-mask-unlock:hover { filter:brightness(1.12); transform:translateY(-1px); }
+.dcdu-multi-body { margin-top:8px; border-top:1px dashed #2f3b45; padding-top:8px; }
+.dcdu-multi-script { min-height:76px; width:100%; box-sizing:border-box; }
+.dcdu-check { display:flex; align-items:center; gap:6px; font-size:12px; color:#cfe6f2; cursor:pointer; }
 .dcdu-mask-legend { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:7px 10px;
   border:1px dashed #3d6f9e; border-radius:8px; background:rgba(30,60,90,.28); font-size:12px; color:#cfe6f2; }
 .dcdu-mask .dcdu-mask-sub { font-size:10px; opacity:.75; max-width:520px; line-height:1.5; }
@@ -1613,6 +1616,40 @@ class DirectorCardUI {
     );
     this.scriptEl = this.bindWidget(textarea, "剧本", { multiline: true });
     hero.appendChild(this.scriptEl);
+    // ROUND54：多段剧本（可选）——多章按顺序自动生成，每章 1 次 Everything API
+    this.multiToggleEl = h("input", { type: "checkbox", id: "dcdu-multi-toggle" });
+    const multiHead = h("div", { class: "dcdu-row" }, [
+      h("label", { class: "dcdu-check" }, [
+        this.multiToggleEl,
+        h("span", { text: tr(
+          "多段剧本（可选：多章按顺序自动生成，每章 1 次 API；设置后忽略上方单段剧本）",
+          "Multi-script (optional: chapters generated in order, 1 API each; overrides the single script above)") }),
+      ]),
+    ]);
+    const multiBody = h("div", { class: "dcdu-multi-body", style: "display:none;" });
+    const multiTa = h("textarea", {
+      class: "dcdu-textarea dcdu-multi-script",
+      placeholder: tr(
+        "粘贴多段剧本，用分隔符切分（默认整行 ---）。示例：\n第一章 雪夜\n...\n---\n第二章 清晨\n...",
+        "Paste chapters separated by the delimiter (default: a line of ---)."),
+    });
+    this.multiScriptEl = this.bindWidget(multiTa, "多段剧本", { multiline: true });
+    const sepInp = h("input", { class: "dcdu-input", style: "max-width:140px;" });
+    this.multiSepEl = this.bindWidget(sepInp, "多段剧本分隔符");
+    multiBody.appendChild(this.multiScriptEl);
+    multiBody.appendChild(h("div", { class: "dcdu-row" }, [
+      h("span", { class: "dcdu-note", text: tr("分隔符", "Delimiter") }),
+      this.multiSepEl,
+    ]));
+    multiBody.appendChild(h("div", { class: "dcdu-note", text: tr(
+      "多章会按顺序逐章生成（同项目复用素材库）；章与章之间目前是硬切，可在后处理加转场；每章内部仍只调用 1 次 API。",
+      "Chapters run sequentially (same project reuses asset library); boundaries are hard cuts (add transitions in post); each chapter still uses exactly 1 API call.") }));
+    this.multiToggleEl.addEventListener("change", () => {
+      multiBody.style.display = this.multiToggleEl.checked ? "block" : "none";
+      this.refreshHeight();
+    });
+    hero.appendChild(multiHead);
+    hero.appendChild(multiBody);
     this.scriptCountEl = h("span", { class: "dcdu-count", text: "" });
     hero.appendChild(h("div", { class: "dcdu-hero-foot" }, [
       button(tr("填入示例剧本", "Fill sample script"), () => {
@@ -1650,14 +1687,15 @@ class DirectorCardUI {
   refreshNextStep() {
     if (!this.nextStepEl) return;
     const script = String(readVal(this.node, "剧本", "") || "").trim();
+    const multiScript = String(readVal(this.node, "多段剧本", "") || "").trim();
     const apiKey = String(readVal(this.node, "api_key", "") || "").trim();
     const project = String(readVal(this.node, "项目", "") || "").trim();
     let kind = "warn";
     let label = "";
     let actions = [];
-    if (!script) {
-      label = tr("下一步：① 在上面「粘贴剧本」里填入剧本（可点「填入示例剧本」）",
-                 "Next: 1) paste your script above (or click Fill sample script)");
+    if (!script && !multiScript) {
+      label = tr("下一步：① 在上面「粘贴剧本」里填入剧本（可点「填入示例剧本」；也可勾选「多段剧本」）",
+                 "Next: 1) paste your script above (or enable Multi-script)");
       kind = "err";
     } else if (!project) {
       label = tr("下一步：② 选择一个已有项目或新建项目（也可直接运行，会用默认项目）",
@@ -1672,7 +1710,7 @@ class DirectorCardUI {
       }, "primary")];
     } else {
       kind = "ready";
-      label = tr("就绪 ✓ 剧本 + 项目 + API Key（面板已配置）——点画布上的 Run / 运行开始出片",
+      label = tr("就绪 ✓ " + (multiScript ? "多段剧本" : "剧本") + " + 项目 + API Key（面板已配置）——点画布上的 Run / 运行开始出片",
                  "Ready ✓ script + project + API key — click Queue on the canvas to run");
     }
     this.nextStepEl.className = `dcdu-nextstep ${kind}`;

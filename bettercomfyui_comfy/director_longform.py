@@ -101,12 +101,21 @@ def save_checkpoint(project_dir: Path, fingerprint: str, state: dict) -> Path:
 
 
 def reuse_batch_files(entry: dict) -> list[str] | None:
-    """已完成批次条目 → 段文件列表；任一文件缺失则不复用（返回 None）。"""
+    """已完成批次条目 → 段文件列表；缺失/0字节/无法探测时长/过短都不复用（返回 None）。"""
     files = [str(x) for x in (entry or {}).get("seg_files") or []]
     if not files:
         return None
-    if not all(Path(f).is_file() for f in files):
-        return None
+    for f in files:
+        fp = Path(f)
+        try:
+            if not fp.is_file() or fp.stat().st_size < 1000:
+                return None
+            from bettercomfyui.review import local_scorer
+            dur = float(local_scorer._probe_media(fp).get("duration_s") or 0.0)
+            if dur < 0.1:
+                return None
+        except Exception:
+            return None
     return files
 
 

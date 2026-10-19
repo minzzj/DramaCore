@@ -129,7 +129,7 @@ class TestNodeContract(unittest.TestCase):
         self.assertTrue(any("webm" in str(x) for x in req["输出格式"][0]))
 
     def test_run_signature_covers_inputs(self):
-        sig = inspect.signature(self.cls.run)
+        sig = inspect.signature(self.cls._run_single)
         missing = [k for k in list(self.info["required"]) + list(self.info.get("optional", {}))
                    if k not in sig.parameters]
         self.assertEqual(missing, [])

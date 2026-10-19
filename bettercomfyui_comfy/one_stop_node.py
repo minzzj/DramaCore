@@ -41,6 +41,20 @@ _DEFAULT_SCRIPT = (
     "林秀在桌边坐下，窗外雪落无声，灯影摇曳。"
 )
 
+def _safe_output_name(name: str) -> str:
+    """输出文件名安全化：去路径穿越/非法字符，保留扩展名（ROUND54 B-10）。"""
+    import re as _re
+
+    raw = str(name or "").strip().replace("\\", "/")
+    base = raw.rsplit("/", 1)[-1] or "单节点成片.mp4"
+    base = _re.sub(r'[<>:"|?*\x00-\x1f]', "_", base).replace("..", "_").strip(" .")
+    if not base:
+        base = "单节点成片.mp4"
+    if not base.lower().endswith((".mp4", ".mov", ".webm")):
+        base += ".mp4"
+    return base
+
+
 _NEGATIVE = "低质量，模糊，变形，水印，文字，多手多脚"
 
 _FULL_POLICIES = ["按项目配置", "阻止输出", "降级输出"]
@@ -554,6 +568,11 @@ class BetterComfyUIOneStop:
                 # ---------------- A. 剧本与项目 ----------------
                 "剧本": ("STRING", {"multiline": True, "default": _DEFAULT_SCRIPT,
                                     "tooltip": "一整段剧本。整条链只允许 1 次 API 调用。"}),
+                "多段剧本": ("STRING", {"multiline": True, "default": "",
+                    "tooltip": "可选：多段剧本按顺序自动生成（每段一次 Everything API）。"
+                               "用「多段剧本分隔符」切分；设置后忽略上面的「剧本」。"}),
+                "多段剧本分隔符": ("STRING", {"default": "---",
+                    "tooltip": "多段剧本分隔符：仅由该字符串构成的整行（如 --- 或 ===）用于切分章节。"}),
                 "项目": ("STRING", {"default": "剧核试用",
                                     "tooltip": "项目显示名或 32 位 id；素材库与输出都写到这里。"}),
                 "输出文件名": ("STRING", {"default": "大节点成片.mp4"}),
@@ -569,7 +588,8 @@ class BetterComfyUIOneStop:
                 "生成素材图": ("BOOLEAN", {"default": True,
                                           "tooltip": "True = 节点内部生成素材参考图并走审核 LOCK；"
                                                      "False = 只用提示词出片（无参考图）"}),
-                "素材最多生成个数": ("INT", {"default": 4, "min": 0, "max": 9}),
+                "素材最多生成个数": ("INT", {"default": 12, "min": 0, "max": 64,
+                                     "tooltip": "本次最多生成/复用多少个素材候选；可到 64。导演台参考图上限 9，超出部分会生成并 LOCK 但只挂前 9 张（审计告警）。"}),
                 "素材审核轮数": ("INT", {"default": 3, "min": 1, "max": 10,
                                         "tooltip": "同一素材最多生成几个候选版本送审（CNT1）；"
                                                    "达上限按规范从候选里选最高分兜底 FALLBACK 并 LOCK。"}),
@@ -736,7 +756,15 @@ class BetterComfyUIOneStop:
         }
 
     # ==================================================================
-    def run(
+    def run(self, **kwargs):
+        """公开入口：无多段剧本 → 原单段流程；有多段剧本 → 顺序逐章自动生成并合成总片。"""
+        multi = str(kwargs.get("多段剧本") or "").strip()
+        if not multi:
+            return self._run_single(**kwargs)
+        return self._run_multi_script(kwargs)
+
+    # ==================================================================
+    def _run_single(
         self,
         剧本: str,
         项目: str,
@@ -749,7 +777,7 @@ class BetterComfyUIOneStop:
         LoRA强度: float = 0.75,
         图像模型: str = "",
         生成素材图: bool = True,
-        素材最多生成个数: int = 3,
+        素材最多生成个数: int = 12,
         素材审核轮数: int = 3,
         素材审核模式: str = "模型审核（本地启发式）",
         素材审核阈值: int = -1,
@@ -765,15 +793,15 @@ class BetterComfyUIOneStop:
         源视频路径: str = "",
         参考视频路径: str = "",
         参考音频路径: str = "",
-        每段时长_秒: float = 5.167,
+        每段时长_秒: float = 10.0,
         段数: int = 1,
         目标总时长_分钟: float = 0.0,
         每批段数: int = 8,
         断点续跑: bool = True,
         批次间卸载模型: bool = True,
         帧率: float = 24.0,
-        宽度: int = 864,
-        高度: int = 480,
+        宽度: int = 1920,
+        高度: int = 1088,
         参考最长边: int = 864,
         步数: int = 6,
         采样器: str = "euler",
@@ -834,18 +862,21 @@ class BetterComfyUIOneStop:
         整片失败策略: str = "按项目配置",
         边界相似度阈值: float = 55.0,
         自动返工: bool = True,
-        CNT2上限: int = 1,
+        CNT2上限: int = 3,
         级联返工: bool = True,
-        CNT3上限: int = 1,
+        CNT3上限: int = 3,
         api_key: str = "",
         model: str = "",
         api_base: str = "",
         统一风格: str = "",
         出片: bool = True,
+        多段剧本: str = "",
+        多段剧本分隔符: str = "---",
     ):
         from . import director_runtime as dr
 
         started = time.time()
+        输出文件名 = _safe_output_name(输出文件名)
         audit: list[str] = ["=== 剧核单节点全流程（剧本→成片·全功能导演台）审计 ==="]
         timings: dict[str, float] = {}
         warnings: list[str] = []
@@ -1068,6 +1099,10 @@ class BetterComfyUIOneStop:
         _base_prompts = [str(text) for text in video_prompts]
         if not _base_prompts:
             raise RuntimeError("剧本拆解没有产出任何视频段：请检查剧本或提示词模板。")
+        if seg_count > len(_base_prompts):
+            warnings.append(
+                f"⚠️ 段数 {seg_count} > 提示词段数 {len(_base_prompts)}：提示词将循环复用"
+                "（同一镜头会重复生成），建议增加剧本内容或减少段数/目标时长")
         prompts = [_base_prompts[i % len(_base_prompts)] for i in range(seg_count)]
         negative = _NEGATIVE
         continuity_enabled = bool(段间连续) and seg_count >= 2
@@ -1132,6 +1167,10 @@ class BetterComfyUIOneStop:
                     ref_videos = [dr.video_ref(str(参考视频路径).strip(), index=0)]
                 if str(参考音频路径 or "").strip():
                     ref_audios = [dr.audio_ref(str(参考音频路径).strip(), index=0)]
+                # ROUND54：项目续写/多段剧本时，把项目库其它已 LOCK 素材补足为参考图（最多 9，导演台上限）
+                asset_paths = self._augment_project_locked_refs(
+                    project_id=project_id, asset_paths=list(asset_paths),
+                    audit=audit, warnings=warnings)
                 base_refs = [
                     dr.image_ref(path, index=idx) for idx, path in enumerate(asset_paths)
                 ]
@@ -1392,6 +1431,7 @@ class BetterComfyUIOneStop:
             expected_segments = max(1, int(tl_summary.get("segmentCount")
                                            or len(seg_files) or 1))
         actual_segments = len(seg_files) if seg_files else 1
+        _seg_dur_json = self._seg_durations_json(seg_files) if seg_files else ""
         integrity, quality = self._review(
             final_path, meta, expected_s=generated_seconds,
             threshold=int(审核阈值), audit=audit,
@@ -1407,6 +1447,8 @@ class BetterComfyUIOneStop:
             整片失败策略=str(整片失败策略), 边界相似度阈值=float(边界相似度阈值),
             project_id=project_id,
             本次是级联重做=bool(rework.get("cnt3") and any(rework["cnt3"])),
+            段时长列表JSON=_seg_dur_json,
+            不计入项目CNT=True,
         )
         # ROUND49：返工/CNT2/CNT3/兜底 结构化给 UI（与整片审核同一对象）
         video_review["rework_rounds"] = list(rework.get("rounds") or [])
@@ -1691,6 +1733,18 @@ class BetterComfyUIOneStop:
             plan = lf.plan_batches(total, size)
         fingerprint = lf.parameter_fingerprint({
             "prompts": [s.get("prompt") for s in specs],
+            "timeline_json": str(ctx.get("时间轴JSON") or ""),
+            "asset_refs": [str(p) for p in (ctx.get("asset_refs") or [])],
+            "first_frame": str(ctx.get("首帧图片路径") or ""),
+            "last_frame": str(ctx.get("尾帧图片路径") or ""),
+            "ref_video": str(ctx.get("参考视频路径") or ""),
+            "ref_audio": str(ctx.get("参考音频路径") or ""),
+            "audio_mode": str(ctx.get("音频模式") or ""),
+            "ref_max_size": ctx.get("参考最长边"),
+            "sampler": ctx.get("采样器"), "scheduler": ctx.get("调度器"),
+            "shift_v": ctx.get("噪声偏移_视频"), "shift_a": ctx.get("噪声偏移_音频"),
+            "segment_seconds": ctx.get("每段时长_秒"),
+            "cfg_scale": ctx.get("cfg"), "steps": ctx.get("步数"),
             "frames": [s.get("frames") for s in specs],
             "width": ctx["宽度"], "height": ctx["高度"], "fps": fps,
             "seed": ctx["seed"], "steps": ctx["步数"], "cfg": ctx["cfg"],
@@ -1850,6 +1904,289 @@ class BetterComfyUIOneStop:
         _encode_movie(segs[0], _normalize_audio(aud), out, float(ctx["帧率"]))
         return out
 
+    # ==================== ROUND54：多段剧本 / 参考图补足 ====================
+    @staticmethod
+    def _split_multi_script(text: str, sep: str = "---") -> list[str]:
+        """多段剧本切分：优先按「仅由分隔符构成的整行」切；否则按字符串切。"""
+        text = str(text or "").strip()
+        if not text:
+            return []
+        sep = str(sep or "---").strip() or "---"
+        pattern = re.compile(rf"(?m)^\s*{re.escape(sep)}\s*$")
+        parts = [x.strip() for x in pattern.split(text) if x.strip()]
+        if len(parts) <= 1:
+            parts = [x.strip() for x in text.split(sep) if x.strip()]
+        return parts
+
+    def _augment_project_locked_refs(self, *, project_id: str, asset_paths: list[str],
+                                     audit: list[str], warnings: list[str],
+                                     max_refs: int = 9) -> list[str]:
+        """把项目库中其它已 LOCK 素材补足为参考图（项目续写/多段剧本防人物漂移）。"""
+        if not project_id:
+            return asset_paths
+        try:
+            from bettercomfyui.store.assets import AssetStore
+            from bettercomfyui.store.paths import ProjectPaths
+
+            paths = ProjectPaths(root=self._project_root(), project_id=project_id)
+            paths.ensure_layout()
+            store = AssetStore(paths)
+        except Exception as exc:  # noqa: BLE001 - 读库失败不阻断出片
+            warnings.append(f"⚠️ 参考图补足读取项目库失败（继续）：{type(exc).__name__}: {exc}")
+            return asset_paths
+        existing = {str(Path(p).resolve()) for p in asset_paths if p}
+        added = 0
+        for asset in store.list_assets():
+            if len(asset_paths) >= max_refs:
+                break
+            try:
+                aid = str(asset.get("asset_id") or "")
+                locked_ver = store.latest_locked_version(aid) if aid else None
+                if not locked_ver:
+                    continue
+                ver = store.get_version(aid, locked_ver) or {}
+                f = ver.get("file_path")
+                if not f:
+                    continue
+                ap = Path(str(f))
+                if not ap.is_absolute():
+                    ap = paths.absolute_from_relative(str(f))
+                if not ap.is_file() or str(ap.resolve()) in existing:
+                    continue
+                asset_paths.append(str(ap))
+                existing.add(str(ap.resolve()))
+                added += 1
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"⚠️ 参考图补足单项失败（跳过）：{type(exc).__name__}: {exc}")
+        if added:
+            audit.append(f"参考图补足：项目库额外 LOCKED 素材 {added} 张（跨章一致性，上限 {max_refs}）")
+        if len(asset_paths) > max_refs:
+            warnings.append(f"⚠️ 参考图 {len(asset_paths)} 张超过导演台上限 {max_refs}："
+                            f"只挂前 {max_refs} 张（其余素材已 LOCK 不丢失）")
+            asset_paths = asset_paths[:max_refs]
+        return asset_paths
+
+    def _run_multi_script(self, kwargs: dict):
+        """多段剧本：逐章调用单段流程（同项目、素材复用），总片做 R_full + 缺章策略 + 章检查点。"""
+        import hashlib
+        import tempfile
+
+        from . import director_edit as de
+
+        started = time.time()
+        chapters = self._split_multi_script(str(kwargs.get("多段剧本") or ""),
+                                           str(kwargs.get("多段剧本分隔符") or "---"))
+        if len(chapters) <= 1:
+            sub = dict(kwargs)
+            sub["剧本"] = str(kwargs.get("多段剧本") or kwargs.get("剧本") or "")
+            sub["多段剧本"] = ""
+            return self._run_single(**sub)
+
+        base_name = _safe_output_name(str(kwargs.get("输出文件名") or "单节点成片"))
+        stem, suffix = Path(base_name).stem, (Path(base_name).suffix or ".mp4")
+        project = str(kwargs.get("项目") or "")
+        fingerprint = hashlib.sha256(json.dumps({
+            "chapters": chapters, "project": project, "stem": stem,
+            "segment_seconds": kwargs.get("每段时长_秒"), "width": kwargs.get("宽度"),
+            "height": kwargs.get("高度"), "task": kwargs.get("任务类型"),
+            "continuity": [kwargs.get("段间连续"), kwargs.get("连续帧数")],
+            "steps": kwargs.get("步数"), "seed": kwargs.get("seed"),
+        }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:20]
+        ck_dir = Path(tempfile.gettempdir()) / "dramacore_multi"
+        ck_path = ck_dir / f"{fingerprint}.json"
+        ck_state: dict = {}
+        if bool(kwargs.get("断点续跑", True)):
+            try:
+                ck_state = json.loads(ck_path.read_text(encoding="utf-8"))
+            except Exception:
+                ck_state = {}
+
+        def _valid_video(fp: Path) -> bool:
+            try:
+                if not fp.is_file() or fp.stat().st_size < 1000:
+                    return False
+                return float(_parse_media(fp).get("duration_s") or 0.0) > 0.1
+            except Exception:
+                return False
+
+        chapter_paths: list[Path] = []
+        chapter_meta: list[dict] = []
+        audits: list[str] = []
+        warnings: list[str] = []
+        prompt_jsons: list[str] = []
+        last_result = None
+        total_api = 0
+        for idx, chapter in enumerate(chapters, start=1):
+            ch_fp = hashlib.sha256(json.dumps({"text": chapter, "stem": stem},
+                                              ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+            cached = (ck_state.get(str(idx)) or {}) if bool(kwargs.get("断点续跑", True)) else {}
+            cached_path = Path(str(cached.get("final_path") or "")) if cached else None
+            if cached and cached.get("fingerprint") == ch_fp and cached_path and _valid_video(cached_path):
+                chapter_paths.append(cached_path)
+                last_result = cached.get("result")
+                prompt_jsons.append(str(cached.get("prompt_json") or ""))
+                total_api += int(cached.get("api_calls") or 0)
+                chapter_meta.append({"index": idx, "ok": True, "reused": True,
+                                     "final_path": str(cached_path),
+                                     "script_chars": len(chapter)})
+                audits.append(f"第{idx}章：检查点命中，跳过生成 → {cached_path}")
+                continue
+            sub = dict(kwargs)
+            sub["剧本"] = chapter
+            sub["多段剧本"] = ""
+            sub["输出文件名"] = f"{stem}_第{idx:02d}章{suffix}"
+            try:
+                result = self._run_single(**sub)
+            except Exception as exc:  # noqa: BLE001 - 记录失败章继续，最终标记不完整
+                msg = f"⚠️ 多段剧本第{idx}章失败（继续后续章节）：{type(exc).__name__}: {exc}"
+                warnings.append(msg)
+                chapter_meta.append({"index": idx, "ok": False, "error": msg,
+                                     "script_chars": len(chapter)})
+                audits.append(f"第{idx}章：失败（{type(exc).__name__}: {exc}）")
+                continue
+            last_result = result
+            path = Path(str(result["result"][0]))
+            prompt_jsons.append(str(result["result"][2] or ""))
+            if str(path).lower().endswith(".json") or not path.is_file():
+                # 出片=False：只产出提示词（不拼接视频）
+                chapter_meta.append({"index": idx, "ok": True, "prompt_only": True,
+                                     "prompt_path": str(path), "script_chars": len(chapter)})
+                audits.append(f"第{idx}章：仅提示词（出片=False）→ {path}")
+                continue
+            chapter_paths.append(path)
+            report = {}
+            try:
+                report = json.loads(str(result["result"][1]))
+            except Exception:
+                pass
+            api = int((report.get("project_context") or {}).get("api_calls") or 1)
+            total_api += api
+            ck_state[str(idx)] = {"fingerprint": ch_fp, "final_path": str(path),
+                                  "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                  "api_calls": api, "prompt_json": result["result"][2],
+                                  "result": result}
+            chapter_meta.append({"index": idx, "ok": True, "final_path": str(path),
+                                 "script_chars": len(chapter), "api_calls": api,
+                                 "verdict": report.get("verdict")})
+            audits.append(f"第{idx}章：成功 → {path}（API {api} 次）")
+
+        try:
+            ck_dir.mkdir(parents=True, exist_ok=True)
+            ck_path.write_text(json.dumps(ck_state, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"⚠️ 多段剧本章检查点写入失败：{type(exc).__name__}: {exc}")
+
+        if not chapter_paths:
+            if prompt_jsons:
+                # 出片=False：只返回提示词结果，不冒充成片
+                base_res = last_result or {"ui": {}, "result": ("", "", "", "", "", "")}
+                summary = ["=== 剧核 多段剧本（仅提示词模式）审计 ===",
+                           f"章节数：{len(chapters)}；出片=False → 未拼接视频",
+                           *audits, *warnings]
+                ui = dict(base_res.get("ui") or {})
+                ui["text"] = ["\n".join(summary)]
+                return {"ui": ui, "result": (prompt_jsons[-1], str(base_res["result"][1]),
+                                             prompt_jsons[-1], "\n".join(summary),
+                                             str(base_res["result"][4]), str(base_res["result"][5]))}
+            raise RuntimeError("多段剧本：所有章节均失败，无成片可返回（详见审计）")
+
+        failed_chapters = [c for c in chapter_meta if not c.get("ok")]
+        master = chapter_paths[0]
+        if len(chapter_paths) > 1:
+            workdir = chapter_paths[0].parent / f"_multi_script_{int(time.time())}"
+            workdir.mkdir(parents=True, exist_ok=True)
+            try:
+                master = Path(de.splice_segments(chapter_paths, workdir=workdir,
+                                                 warnings=warnings))
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"⚠️ 多段剧本总片拼接失败（返回第一章成片）："
+                                f"{type(exc).__name__}: {exc}")
+                master = chapter_paths[0]
+        # 总片落到项目输出目录（统一命名 + 元数据）
+        try:
+            out_dir = Path(chapter_paths[0]).parent
+            final_master = out_dir / f"{stem}_多章节成片{suffix}"
+            if Path(master).resolve() != final_master.resolve():
+                import shutil as _shutil
+
+                _shutil.copy2(master, final_master)
+                master = final_master
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"⚠️ 多段剧本总片落盘失败：{type(exc).__name__}: {exc}")
+        last_report: dict = {}
+        if last_result is not None:
+            try:
+                last_report = json.loads(str(last_result["result"][1]))
+            except Exception:
+                last_report = {}
+        project_id = str((last_report.get("project_context") or {}).get("project_id") or "")
+        # 总片级 R_full（缺失章节时必须不通过，不能假成功）
+        master_review: dict = {}
+        try:
+            master_review = self._video_review(
+                Path(master), project or "多段剧本", float(kwargs.get("每段时长_秒") or 10.0),
+                audits, 审核范围=_VIDEO_REVIEW_SCOPES[0],
+                project_id=project_id, 不计入项目CNT=True)
+        except Exception as exc:  # noqa: BLE001
+            master_review = {"verdict": f"审核失败：{type(exc).__name__}: {exc}",
+                             "segment_scores": [], "full": {}}
+            warnings.append(f"⚠️ 多段剧本总片审核失败：{type(exc).__name__}: {exc}")
+        master_ok = (not failed_chapters) and str(master_review.get("verdict") or "") == "通过"
+        if failed_chapters:
+            warnings.append(f"⚠️ 缺章策略：{len(failed_chapters)} 章失败 → 总片标记为不完整/不通过，"
+                            "不冒充成功（可重跑补章：相同参数会命中章检查点）")
+        # 元数据落盘
+        meta_path = ""
+        try:
+            meta_path = str(Path(master).with_suffix(Path(master).suffix + ".meta.json"))
+            meta = {"master": str(master), "chapters": chapter_meta,
+                    "failed_chapters": failed_chapters, "complete": master_ok,
+                    "master_review": master_review,
+                    "api_calls_total": total_api,
+                    "written_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+            Path(meta_path).write_text(json.dumps(meta, ensure_ascii=False, indent=2),
+                                       encoding="utf-8")
+            audits.append(f"多段剧本元数据：{meta_path}")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"⚠️ 多段剧本元数据写入失败：{type(exc).__name__}: {exc}")
+        export = None
+        try:
+            export = self._export_to_comfyui(Path(master))
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"⚠️ 多段剧本总片导出 ComfyUI 预览失败：{type(exc).__name__}: {exc}")
+            export = None
+        last_report["verdict"] = "通过" if master_ok else "不通过（缺章/总片审核）"
+        last_report["multi_script"] = {
+            "chapters": chapter_meta,
+            "failed_chapters": failed_chapters,
+            "complete": master_ok,
+            "master": str(master),
+            "master_metadata": meta_path,
+            "master_review": master_review,
+            "api_calls_total": total_api,
+            "note": "多段剧本逐章顺序生成；每章 1 次 Everything API；同项目素材复用；"
+                    "22 帧连续性仅章内（章间硬切）；总片经 R_full 审核，缺章一律不通过",
+        }
+        summary = ["=== 剧核 多段剧本顺序生成（剧核）审计 ===",
+                   f"章节数：{len(chapters)}（成功 {len(chapter_paths)} / 缺章 {len(failed_chapters)}）",
+                   f"API 调用总次数：{total_api}（每章 1 次；单章内部仍严格 1 次）",
+                   f"总片：{master}",
+                   f"总片审核：{master_review.get('verdict')}（complete={master_ok}）"]
+        summary.extend(audits)
+        summary.extend(warnings)
+        summary.append(f"多段剧本总耗时：{round(time.time() - started, 2)}s")
+        ui = {"text": ["\n".join(summary)], "dramacore_report": last_report}
+        if export:
+            suffix_l = str(master).lower()
+            mime = ".mov" if suffix_l.endswith(".mov") else (".webm" if suffix_l.endswith(".webm") else "video/h264-mp4")
+            ui["images"] = [export]
+            ui["animated"] = [True]
+            ui["gifs"] = [dict(export, format=mime)]
+        last_res = last_result["result"] if last_result else ("", "", "", "", "", "")
+        return {"ui": ui, "result": (str(master), json.dumps(last_report, ensure_ascii=False, indent=2),
+                                     str(last_res[2]), "\n".join(summary),
+                                     str(last_res[4]), str(last_res[5]))}
+
     def _auto_rework(self, *, ctx, seg_files, project_id, project_dir, audit, warnings):
         """SG5 U/REGEN/CNT2 + N1/CNT3 级联：段不过 → 自动重生成该段 → 重审。"""
         t0 = time.time()
@@ -1889,7 +2226,9 @@ class BetterComfyUIOneStop:
                 审核范围="仅段级 R_seg", project_id=project_id,
                 本次是级联重做=False,
                 段阈值覆盖=float(ctx["段阈值覆盖"]),
-                边界相似度阈值=float(ctx["边界相似度阈值"]))
+                边界相似度阈值=float(ctx["边界相似度阈值"]),
+                段时长列表JSON=self._seg_durations_json(seg_files),
+                不计入项目CNT=True)
             need_text = str(rev.get("need_regenerate") or "无")
             need = ([int(x) for x in re.findall(r"\d+", need_text)]
                     if need_text and need_text not in ("无", "None") else [])
@@ -1928,7 +2267,9 @@ class BetterComfyUIOneStop:
                     Path(new_file), ctx["项目"], float(ctx["每段时长_秒"]), audit,
                     审核范围="仅段级 R_seg", project_id=project_id,
                     段阈值覆盖=float(ctx["段阈值覆盖"]),
-                    边界相似度阈值=float(ctx["边界相似度阈值"]))
+                    边界相似度阈值=float(ctx["边界相似度阈值"]),
+                    段时长列表JSON=self._seg_durations_json([new_file]),
+                    不计入项目CNT=True)
                 score = None
                 rows = seg_rev.get("segment_scores") or []
                 if rows:
@@ -1972,7 +2313,9 @@ class BetterComfyUIOneStop:
                 审核范围="仅段级 R_seg", project_id=project_id,
                 本次是级联重做=bool(any(result["cnt3"])),
                 段阈值覆盖=float(ctx["段阈值覆盖"]),
-                边界相似度阈值=float(ctx["边界相似度阈值"]))
+                边界相似度阈值=float(ctx["边界相似度阈值"]),
+                段时长列表JSON=self._seg_durations_json(seg_files),
+                不计入项目CNT=True)
             final_need_text = str(final_rev.get("need_regenerate") or "无")
             final_need = ([int(x) for x in re.findall(r"\d+", final_need_text)]
                           if final_need_text and final_need_text not in ("无", "None") else [])
@@ -2022,6 +2365,26 @@ class BetterComfyUIOneStop:
                     audios.append(item)
         if not segs:
             raise RuntimeError("导演台没有返回任何画面张量：无法编码成片。")
+        # ROUND54 B-05：只有一条音频但多段时，按段帧数比例切分音频（避免每段套整条音轨）
+        if len(audios) == 1 and len(segs) > 1:
+            try:
+                import torch
+
+                wf = audios[0].get("waveform")
+                sr = int(audios[0].get("sample_rate") or 24000)
+                if wf is not None and hasattr(wf, "shape") and wf.dim() >= 2:
+                    total = int(wf.shape[-1])
+                    frames = [int(getattr(s, "shape", [0])[0]) for s in segs]
+                    total_frames = sum(frames) or len(frames)
+                    out, pos = [], 0
+                    for i, fcnt in enumerate(frames):
+                        n = total - pos if i == len(frames) - 1 else int(round(total * fcnt / total_frames))
+                        n = max(1, min(n, total - pos)) if total - pos > 0 else 1
+                        out.append(dict(audios[0], waveform=wf[..., pos:pos + n].clone()))
+                        pos += n
+                    audios = out
+            except Exception:  # noqa: BLE001 - 分轨失败保留原音频，不阻断出片
+                pass
         return segs, audios
 
     # ==================================================================
@@ -2184,46 +2547,56 @@ class BetterComfyUIOneStop:
     def _wait_human_asset_decision(self, *, project_dir: Path, asset_id: str, version: str,
                                    name: str, png: Path | None,
                                    audit: list[str], warnings: list[str]) -> dict:
-        """ROUND53 P0-3：真实人工审核等待（文件队列 + 超时切模型）。
+        """ROUND54 A4/B-07：真实人工等待（nonce+时间戳+消费归档，防陈旧审批绕过）。"""
+        import uuid
 
-        人工操作方式：审批时在 `<项目>/review/asset_decision_<asset_id>_<version>.json`
-        写入 `{"approved": true|false, "operator": "xxx", "reason": "..."}`；
-        未在 `asset_review.human_timeout_minutes` 内给出结论 → 切模型审核（CNT1 从 0）。
-        """
         cfg = getattr(self, "_cfg", None)
         asset_cfg = getattr(cfg, "asset_review", None)
         timeout_min = float(getattr(asset_cfg, "human_timeout_minutes", 10) or 10)
         interval = self._retry_interval_seconds()
         review_dir = Path(project_dir) / "review"
         review_dir.mkdir(parents=True, exist_ok=True)
+        nonce = f"{int(time.time())}-{uuid.uuid4().hex[:10]}"
         pending = review_dir / f"asset_pending_{asset_id}_{version}.json"
         decision = review_dir / f"asset_decision_{asset_id}_{version}.json"
+        created_ts = time.time()
         pending.write_text(json.dumps({
             "asset_id": asset_id, "version": version, "name": name,
-            "png": str(png) if png else None,
-            "created_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+            "png": str(png) if png else None, "nonce": nonce, "created_unix": created_ts,
+            "created_at": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(created_ts)),
             "instruction": "人工审批：写同目录 asset_decision_<asset_id>_<version>.json，"
-                           "内容 {\"approved\": true/false, \"operator\": \"...\", \"reason\": \"...\"}",
+                           "必须包含 {\"approved\": true/false, \"nonce\": \"" + nonce + "\", "
+                           "\"operator\": \"...\", \"reason\": \"...\"}；文件用后即归档",
             "timeout_minutes": timeout_min,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
-        audit.append(f"人工审核：等待审批文件 {pending}（超时 {timeout_min} 分钟→切模型；"
-                     f"轮询间隔 {interval}s）")
+        audit.append(f"人工审核：等待审批文件 {pending}（nonce={nonce}；超时 {timeout_min} 分钟→切模型）")
         deadline = time.time() + max(0.0, timeout_min) * 60.0
         while time.time() < deadline:
             if decision.is_file():
+                data = None
                 try:
                     data = json.loads(decision.read_text(encoding="utf-8"))
-                except Exception as exc:  # noqa: BLE001 - 文件坏不算通过
+                except Exception as exc:  # noqa: BLE001
                     warnings.append(f"⚠️ 人工审批文件解析失败（继续等待）：{type(exc).__name__}: {exc}")
-                    data = None
-                if isinstance(data, dict) and isinstance(data.get("approved"), bool):
-                    verdict = "通过" if data["approved"] else "拒绝"
-                    audit.append(f"人工审核：{verdict}（operator={data.get('operator') or '未署名'}；"
-                                 f"reason={data.get('reason') or '无'}；文件 {decision}）")
-                    return {"approved": bool(data["approved"])}
-                warnings.append("⚠️ 人工审批文件缺少布尔 approved 字段（按继续等待处理，不放行）")
+                if isinstance(data, dict):
+                    if str(data.get("nonce") or "") != nonce:
+                        warnings.append("⚠️ 人工审批文件 nonce 不匹配（陈旧/其他运行的文件，已忽略并归档）")
+                    elif not isinstance(data.get("approved"), bool):
+                        warnings.append("⚠️ 人工审批文件缺少布尔 approved（继续等待，不放行）")
+                    else:
+                        try:
+                            decision.replace(decision.with_suffix(".used.json"))
+                        except Exception:
+                            try:
+                                decision.unlink()
+                            except Exception:
+                                pass
+                        verdict = "通过" if data["approved"] else "拒绝"
+                        audit.append(f"人工审核：{verdict}（operator={data.get('operator') or '未署名'}；"
+                                     f"reason={data.get('reason') or '无'}；nonce={nonce}；文件已归档）")
+                        return {"approved": bool(data["approved"])}
             time.sleep(interval)
-        audit.append(f"人工审核超时（{timeout_min} 分钟无结论）→ 自动切模型审核（CNT1 从 0）")
+        audit.append(f"人工审核超时（{timeout_min} 分钟无有效结论）→ 自动切模型审核（CNT1 从 0）")
         return {"approved": False, "forced_model": True}
 
     def _generate_and_review_assets(
@@ -2299,7 +2672,12 @@ class BetterComfyUIOneStop:
                     if locked_ver:
                         ver_row = store.get_version(aid, locked_ver) or {}
                         f = ver_row.get("file_path")
-                        if f:
+                        if f and not self._verify_locked_asset(
+                                store, aid, locked_ver, project_dir, warnings):
+                            audit.append(f"  ⚠️ 素材 {cand['name']} {locked_ver} LOCK 指纹不符，"
+                                         "不挂参考图（重生成新候选）")
+                            locked_ver = None
+                        if locked_ver and f:
                             abs_path = Path(str(f))
                             if not abs_path.is_absolute():
                                 abs_path = paths.absolute_from_relative(str(f))
@@ -2466,6 +2844,45 @@ class BetterComfyUIOneStop:
             "_tensors": tensors, "_paths": ok_paths,
         }
 
+    def _verify_locked_asset(self, store, asset_id: str, version: str,
+                             project_dir: Path, warnings: list[str]) -> bool:
+        """LOCK 内容指纹校验（R3）：被替换/篡改的 LOCK 文件不得挂进生成链路。"""
+        try:
+            from bettercomfyui.store.assets import verify_locked_file_content
+
+            locked = store.resolve_lock(asset_id, version)
+            if not locked:
+                warnings.append(f"⚠️ 素材 {asset_id} {version} 无有效 LOCK 记录，不挂参考图")
+                return False
+            ver = store.get_version(asset_id, version) or {}
+            f = ver.get("file_path")
+            if not f:
+                return False
+            fp = Path(str(f))
+            if not fp.is_absolute():
+                from bettercomfyui.store.paths import ProjectPaths
+
+                paths = ProjectPaths(root=self._project_root(), project_id=project_dir.name)
+                fp = paths.absolute_from_relative(str(f))
+            verify_locked_file_content(locked, fp)
+            return True
+        except Exception as exc:  # noqa: BLE001 - 校验失败即拒绝挂图并告警
+            warnings.append(f"⚠️ LOCK 内容指纹校验失败（不挂该素材）：{type(exc).__name__}: {exc}")
+            return False
+
+    def _seg_durations_json(self, seg_files: list[Any]) -> str:
+        """把实际编码后的段文件时长组成 JSON 数组（供视频审核按真实边界切段）。"""
+        out: list[float] = []
+        for f in seg_files or []:
+            try:
+                meta = _parse_media(Path(str(f)))
+                dur = float(meta.get("duration_s") or 0.0)
+                if dur > 0.05:
+                    out.append(round(dur, 3))
+            except Exception:  # noqa: BLE001
+                continue
+        return json.dumps(out)
+
     # ==================================================================
     def _video_review(self, final_path: Path, 项目: str, 每段时长_秒: float,
                       audit: list[str], *, 审核范围: str = _VIDEO_REVIEW_SCOPES[0],
@@ -2473,7 +2890,9 @@ class BetterComfyUIOneStop:
                       整片失败策略: str = _FULL_POLICIES[0],
                       边界相似度阈值: float = 55.0,
                       project_id: str = "",
-                      本次是级联重做: bool = False) -> dict:
+                      本次是级联重做: bool = False,
+                      段时长列表JSON: str = "",
+                      不计入项目CNT: bool = True) -> dict:
         """段级 R_seg + 整片 R_full 审核（复用本包视频审核节点，真实分数）。
 
         修复 P0-1：`BetterComfyUIVideoReview.run()` 直接返回 5 元组（结论/段JSON/
@@ -2489,6 +2908,8 @@ class BetterComfyUIOneStop:
                 整片阈值覆盖=float(整片阈值覆盖), 整片失败策略=整片失败策略,
                 边界相似度阈值=float(边界相似度阈值),
                 本次是级联重做=bool(本次是级联重做),
+                段时长列表JSON=str(段时长列表JSON or ""),
+                不计入项目CNT=bool(不计入项目CNT),
             )
             values = result.get("result") if isinstance(result, dict) else result
             if not isinstance(values, (list, tuple)):

@@ -404,10 +404,47 @@ class BetterComfyUIVideoReview:
                                              "tooltip": "True 时返工计入 CNT3；否则计入 CNT2。"}),
                 "边界相似度阈值": ("FLOAT", {"default": 55.0, "min": 0.0, "max": 100.0, "step": 1.0,
                                            "tooltip": "第N段尾帧与第N+1段首帧的直方图相似度下限。"}),
+                "段时长列表JSON": ("STRING", {"default": "",
+                    "tooltip": "可选：实际每段时长（秒）JSON 数组。填了按真实边界切段做 R_seg，"
+                               "避免帧网格吸附导致段号系统性错位（长片/多段必填更准）。"}),
+                "不计入项目CNT": ("BOOLEAN", {"default": False,
+                    "tooltip": "True：本次只判定、不写项目 CNT2/CNT3（由单节点等调用方管理返工计数，避免重复计数）。"}),
             },
         }
 
     # -- 工具 ---------------------------------------------------------
+    @staticmethod
+    def _split_by_durations(video: Path, durations: list[float], out_dir: Path) -> list[Path]:
+        """按真实每段时长切段（重编码保证边界准确；帧网格漂移不再导致段号错位）。"""
+        import subprocess
+
+        from bettercomfyui.pipeline.core import _ffmpeg_exe
+
+        src = Path(video)
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        files: list[Path] = []
+        start = 0.0
+        for idx, dur in enumerate(durations, start=1):
+            dur = float(dur)
+            if dur <= 0.05:
+                continue
+            fp = out / f"seg_actual_{idx:03d}.mp4"
+            cmd = [_ffmpeg_exe(), "-y", "-v", "error",
+                   "-ss", f"{start:.3f}", "-t", f"{dur:.3f}", "-i", str(src),
+                   "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                   "-c:a", "aac", "-b:a", "96k", str(fp)]
+            proc = subprocess.run(cmd, capture_output=True, text=True,
+                                  encoding="utf-8", errors="replace")
+            if proc.returncode != 0 or not fp.is_file() or fp.stat().st_size < 500:
+                raise _NodeError(
+                    f"按实际段时长切段失败（第 {idx} 段 {dur:.3f}s）：{(proc.stderr or '')[-300:]}")
+            files.append(fp)
+            start += dur
+        if not files:
+            raise _NodeError("按实际段时长切段：没有产生任何段文件")
+        return files
+
     @staticmethod
     def _hist_similarity(frame_a: Any, frame_b: Any) -> float:
         import numpy as np
@@ -455,7 +492,8 @@ class BetterComfyUIVideoReview:
             审核范围: str = _REVIEW_SCOPES[0], 评分来源: str = _SCORE_SOURCES[0],
             段阈值覆盖: float = -1.0, 整片阈值覆盖: float = -1.0,
             整片失败策略: str = _FULL_POLICIES[0], 人工分数JSON: str = "",
-            本次是级联重做: bool = False, 边界相似度阈值: float = 55.0):
+            本次是级联重做: bool = False, 边界相似度阈值: float = 55.0,
+            段时长列表JSON: str = "", 不计入项目CNT: bool = False):
         _NodeError, _config, _orch, _orch_repo_root, _store_for_project = _orch_helpers()
         from bettercomfyui.models.enums import FullReviewPolicy
         from bettercomfyui.pipeline.core import apply_full_policy, full_review
@@ -510,8 +548,22 @@ class BetterComfyUIVideoReview:
         need_regen: list[int] = []
         if scope_seg:
             try:
-                seg_files = local_scorer.split_video_into_segments(
-                    video, segment_seconds=float(每段时长_秒), out_dir=work_dir)
+                _dur_list: list[float] = []
+                if str(段时长列表JSON or "").strip():
+                    try:
+                        raw_dur = json.loads(段时长列表JSON)
+                        if isinstance(raw_dur, list):
+                            _dur_list = [float(x) for x in raw_dur if float(x) > 0.05]
+                    except Exception as exc:  # noqa: BLE001
+                        warnings.append(f"段时长列表JSON 解析失败（回退按等时长切段）：{exc}")
+                if _dur_list:
+                    seg_files = self._split_by_durations(video, _dur_list, work_dir)
+                    summary_lines.append(
+                        f"按实际段时长切段（{len(_dur_list)} 段，合计 {sum(_dur_list):.2f}s）："
+                        f"{[round(d, 3) for d in _dur_list[:8]]}{'…' if len(_dur_list) > 8 else ''}")
+                else:
+                    seg_files = local_scorer.split_video_into_segments(
+                        video, segment_seconds=float(每段时长_秒), out_dir=work_dir)
             except local_scorer.LocalScorerError as exc:
                 raise _NodeError(f"视频切段失败：{exc}") from exc
 
@@ -621,6 +673,14 @@ class BetterComfyUIVideoReview:
                 hist = history["segments"].setdefault(str(index), [])
                 hist.append({"score": score, "passed": passed, "at": ts})
                 if not passed:
+                    if 不计入项目CNT:
+                        need_regen.append(index)
+                        record["counters"] = {"skipped": "caller_manages_cnt"}
+                        summary_lines.append(
+                            f"段 {index}: 未过阈值（{score} < {threshold_seg}）→ 需重生成"
+                            "（本次不计入项目 CNT，由调用方管理）")
+                        segments.append(record)
+                        continue
                     kind = "CNT3" if 本次是级联重做 else "CNT2"
                     from bettercomfyui.models.enums import CounterKind
 

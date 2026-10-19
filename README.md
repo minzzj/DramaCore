@@ -1,6 +1,6 @@
 # 剧核 DramaCore（Better ComfyUI）
 
-> ⚠️ **v0.1.1-internal · 内测版 · 未完成完整 GPU 测试**
+> ⚠️ **v0.1.2-internal · 内测版 · 未完成完整 GPU 测试**
 > 本版本可用于内测与预览，但**尚未在目标 GPU 机器完成完整端到端验收**（远端 4090 已关机）。
 > 请勿将其视为稳定生产版本；重要项目请自行充分测试。
 
@@ -43,7 +43,7 @@
 4. 确认 API Key（面板配置或节点内填写），点画布顶部 **运行**；
 5. 结果：节点审核结论 + 成片（`ComfyUI/output/剧核成片/`，同时写项目目录）。
 
-## 已知限制（v0.1.1-internal）
+## 已知限制（v0.1.2-internal）
 
 1. **未完成完整 GPU 真机验收**（本机仅 CPU 预览 UI；远端 4090 关机）；
 2. R_seg JSON 的 `index/scores` 字段显示可能为空（分数本身有效）；
@@ -74,7 +74,7 @@
 
 # DramaCore (Better ComfyUI) — Internal Test Build
 
-⚠️ **v0.1.1-internal — NOT fully GPU-tested.** Use at your own risk; not a stable release.
+⚠️ **v0.1.2-internal — NOT fully GPU-tested.** Use at your own risk; not a stable release.
 
 One ComfyUI node: script → prompts → assets (generate/review/LOCK) → H3 director (with 22-frame segment continuity)
 → segment/full review → final cut (transitions/subtitles/watermark/cover). Core director source is vendored; no external custom nodes required.

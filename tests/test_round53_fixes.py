@@ -30,7 +30,7 @@ def test_defaults_aligned_to_flow_requirements():
     assert req["每段时长_秒"][1]["default"] == 10.0
     assert req["宽度"][1]["default"] == 1920
     assert req["高度"][1]["default"] == 1088
-    assert req["素材最多生成个数"][1]["default"] == 4
+    assert req["素材最多生成个数"][1]["default"] == 12
     assert req["CNT2上限"][1]["default"] == 3
     assert req["CNT3上限"][1]["default"] == 3
 
@@ -85,9 +85,16 @@ def test_human_review_wait_approves_and_writes_pending(tmp_path):
 
     def approve():
         time.sleep(0.3)
+        pending = project_dir / "review" / "asset_pending_a1_v1.json"
+        nonce = ""
+        try:
+            nonce = str((json.loads(pending.read_text(encoding="utf-8")) or {}).get("nonce") or "")
+        except Exception:
+            pass
         decision_file.parent.mkdir(parents=True, exist_ok=True)
         decision_file.write_text(json.dumps(
-            {"approved": True, "operator": "tester", "reason": "ok"}), encoding="utf-8")
+            {"approved": True, "operator": "tester", "reason": "ok",
+             "nonce": nonce}), encoding="utf-8")
 
     th = threading.Thread(target=approve)
     th.start()

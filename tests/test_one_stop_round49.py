@@ -149,7 +149,7 @@ class TestNodeContract(unittest.TestCase):
     def test_asset_threshold_param(self):
         req = self.info["required"]
         self.assertIn("素材审核阈值", req)
-        sig = inspect.signature(self.cls.run)
+        sig = inspect.signature(self.cls._run_single)
         self.assertIn("素材审核阈值", sig.parameters)
 
     def test_ui_report_contract_source(self):

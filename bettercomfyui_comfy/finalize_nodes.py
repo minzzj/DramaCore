@@ -144,15 +144,9 @@ class BetterComfyUIFinalize:
 
         cutoff = _time.time() - max(1, int(window_minutes)) * 60
         dirs: list[Path] = [Path(paths.output_dir), Path(paths.project_dir) / "output"]
-        try:
-            import folder_paths  # type: ignore
-
-            comfy_out = Path(folder_paths.get_output_directory())
-            # 排除本节点自己导出的「剧核成片」目录，避免把上一次的成片当成"段视频"再拼进去
-            dirs.append(comfy_out)
-            exclude_dirs = {(comfy_out / "剧核成片").resolve()}
-        except Exception:  # noqa: BLE001 - 非 ComfyUI 环境（pytest/CLI）：不扫 .comfyui/output
-            exclude_dirs = set()
+        # ROUND54 B-09：不再扫描全局 ComfyUI output（并发时会拼进别的项目视频）；
+        # 只扫描项目自己的输出目录，找不到就让用户显式给段视频列表。
+        exclude_dirs = set()
         skip_words = ("成片_", "spliced", "final", "acceptance", "e2e_", "edge.mp4",
                       "宣传片", "hires", "round39", "preview", "stitched", "up_cn")
         found: dict[Path, float] = {}
