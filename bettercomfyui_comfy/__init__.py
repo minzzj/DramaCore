@@ -23,9 +23,10 @@ ComfyUI 在启动时 import 本模块。如果这里抛异常，整个节点包�
 from __future__ import annotations
 
 import logging
+import os
 import traceback
 
-__version__ = "0.1.2-internal"
+__version__ = "0.1.3-internal"
 
 logger = logging.getLogger("bettercomfyui.comfy")
 if not logger.handlers:
@@ -253,6 +254,73 @@ def _register_routes() -> None:
 
 
 _register_routes()
+
+
+def _env_flag(name: str) -> bool:
+    """环境变量开关（与 hardware_adapt 的判定保持同一套真值表）。"""
+    return str(os.environ.get(name) or "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _hardware_boot_summary() -> None:
+    """启动时打印一行硬件摘要 + 需要用户知道的补丁状态（ROUND57）。
+
+    **必须完全兜住异常**：ComfyUI 启动时 import 本包，任何未捕获异常都会让
+    用户看到「节点全部消失」。硬件探测依赖 torch/驱动/编排包，属于最可能
+    在陌生机器上出错的环节，所以这里连 import 都放进 try 里。
+
+    输出刻意很短：详细报告在 `/bettercomfyui/hardware` 或
+    `python -m bettercomfyui.hardware doctor`。
+    """
+    try:
+        from .hardware_adapt import preflight
+
+        info = preflight()
+        if not info.get("available"):
+            logger.warning("剧核 DramaCore：硬件适配不可用（%s），节点仍可用。",
+                           info.get("error") or "原因未知")
+            print(
+                "\n[剧核 DramaCore] 硬件适配不可用（节点仍可用）。\n"
+                f"  原因：{info.get('error') or '未知'}\n"
+                "  修复：确认编排包 bettercomfyui 已安装，然后运行 "
+                "`python -m bettercomfyui.hardware doctor`。\n"
+            )
+            return
+
+        vram_gb = int(info.get("vram_mib") or 0) // 1024
+        device = info.get("device_name") or "未识别设备"
+        logger.info(
+            "剧核 DramaCore：硬件 %s / %s · %s · %dGB · Tier %s · 补丁=%s",
+            info.get("vendor"), info.get("backend"), device, vram_gb,
+            info.get("tier"), info.get("patches_status"),
+        )
+        lines = [
+            "",
+            "[剧核 DramaCore] 硬件适配摘要",
+            f"  设备  : {info.get('vendor')} / {info.get('backend')} · {device} · {vram_gb}GB",
+            f"  分级  : {info.get('tier_label')} · H3 全流程="
+            f"{'支持/有条件' if info.get('full_h3_supported') else '不保证/不可用'}",
+        ]
+        if info.get("launch_args"):
+            lines.append("  启动参数: " + " ".join(info["launch_args"]))
+        patches = info.get("patches_status")
+        if patches not in (None, "", "not_required"):
+            lines.append(
+                f"  运行时补丁: {patches} — {info.get('patches_reason') or ''}".rstrip())
+            if patches in ("partial", "deferred", "disabled_by_env"):
+                lines.append("  手动步骤见 /bettercomfyui/hardware 或 "
+                             "`python -m bettercomfyui_comfy.hardware_adapt patches`。")
+        if info.get("warnings"):
+            lines.append(f"  注意  : {info['warnings'][0]}")
+        lines.append("  详情  : /bettercomfyui/hardware")
+        print("\n".join(lines) + "\n")
+    except Exception as exc:  # noqa: BLE001 - 启动期绝不允许拖垮节点加载
+        logger.warning("剧核 DramaCore：硬件摘要打印失败（不影响节点）：%s: %s",
+                       type(exc).__name__, exc)
+
+
+#: 允许用户用环境变量彻底关掉启动期硬件探测（老机器/无驱动环境排障用）
+if not _env_flag("BETTERCOMFYUI_DISABLE_HARDWARE"):
+    _hardware_boot_summary()
 
 #: 显式声明第二阶段不在 UI 暴露（用户要求：保留接入点但不展示）
 PHASE2_NODES_EXPOSED = False

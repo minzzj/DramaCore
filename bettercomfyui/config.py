@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import copy
 import os
-from dataclasses import fields as dc_fields, is_dataclass
+from dataclasses import dataclass, fields as dc_fields, is_dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +43,26 @@ _SECTION_TYPES: dict[str, type] = {
     "encode": EncodeParams,
     "global": GlobalParams,
 }
+
+#: ROUND55：H3 提示词手册 / 禁止字幕开关的默认值。
+#: （PromptParams 定义在 models/entities.py；本轮只允许改 config.py，故用子类只加字段，
+#:   不改实体定义，保证旧调用 Config()/PromptParams() 仍然可用。）
+ROUND55_PROMPT_EXTRA_DEFAULTS: dict[str, bool] = {
+    "h3_manual_enabled": True,
+    "no_subtitle": True,
+}
+
+
+@dataclass
+class _PromptParamsRound55(PromptParams):
+    """PromptParams + ROUND55 开关（只加字段；字段与 config/default.yaml 一一对应）。"""
+
+    h3_manual_enabled: bool = True
+    no_subtitle: bool = True
+
+
+# 让配置段 [prompt] 使用扩展后的 dataclass：未知键校验与构造都会接受这两个新字段。
+_SECTION_TYPES["prompt"] = _PromptParamsRound55
 
 #: 需要从字符串转成枚举的字段： (段名, 字段名) -> 枚举类
 _ENUM_FIELDS: dict[tuple[str, str], type] = {
@@ -241,6 +261,11 @@ def _cross_validate(cfg: Config) -> None:
         raise ConfigError("prompt.output_format 只能是 json 或 delimited")
     if cfg.prompt.story_granularity not in ("shot", "scene"):
         raise ConfigError("prompt.story_granularity 只能是 shot 或 scene")
+    # ---- ROUND55：H3 手册 / 禁止字幕开关必须是布尔（缺省视为开启）----
+    for _name in ("h3_manual_enabled", "no_subtitle"):
+        _val = getattr(cfg.prompt, _name, True)
+        if not isinstance(_val, bool):
+            raise ConfigError(f"配置 [prompt].{_name} 必须是布尔值，实际 {type(_val).__name__}")
     # 手动审核模式却把超时策略设为切模型是允许的（人工超时切模型是核心特性），
     # 但「暂停超时」关闭 + on_timeout=skip 会导致人工永不超时也永不切换，属于陷阱。
     if not cfg.asset_review.timeout_pause_on_active_op and cfg.asset_review.on_timeout == "skip":
@@ -306,6 +331,7 @@ def dump_config(cfg: Config, path: Path) -> None:
 
 __all__ = [
     "ConfigError",
+    "ROUND55_PROMPT_EXTRA_DEFAULTS",
     "load_config",
     "config_from_dict",
     "resolve_secret",

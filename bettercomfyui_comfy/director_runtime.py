@@ -766,3 +766,98 @@ def output_config_summary(output: dict) -> dict:
         "continuityRedraw", "continuityKeepTail", "width", "height", "longEdge",
     )
     return {key: output.get(key) for key in keys}
+
+
+# ---------------------------------------------------------------------------
+# ROUND55：tiled 采样（空间分块）参数归一化
+# ---------------------------------------------------------------------------
+#: one_stop「tiled采样」默认重叠像素（节点默认 0 = 关闭，保持旧行为）
+DEFAULT_TILED_OVERLAP_PIXELS = 64
+#: vendor 分块上限（与 spatial_tiled_sampling.clamp_n_tiles 一致）
+MAX_TILED_N_TILES = 8
+
+
+def _safe_int(raw: Any, default: int) -> int:
+    try:
+        if isinstance(raw, bool):
+            return int(raw)
+        return int(raw)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def tiled_sampling_kwargs(
+    n_tiles: Any = 0,
+    overlap_pixels: Any = DEFAULT_TILED_OVERLAP_PIXELS,
+) -> dict:
+    """one_stop → ``MiniMaxH3Director.execute`` 的 tiled 关键字参数（可直接 ``**``）。
+
+    * ``n_tiles <= 1``（含默认 0 / 负数 / 非法值）→ ``tiled_n_tiles=0``，
+      vendor 侧 ``resolve_tiled_request`` 判为关闭，主采样器不会被包装；
+    * ``n_tiles > 1`` → 钳到 1..8（vendor 上限）；
+    * overlap 钳到 [0, 2048]。
+    """
+    raw = _safe_int(n_tiles, 0)
+    overlap = max(0, min(2048, _safe_int(overlap_pixels, DEFAULT_TILED_OVERLAP_PIXELS)))
+    return {
+        "tiled_n_tiles": 0 if raw <= 1 else max(1, min(MAX_TILED_N_TILES, raw)),
+        "tiled_overlap_pixels": overlap,
+    }
+
+
+def normalize_tiled_sampling(
+    n_tiles: Any = 0,
+    overlap_pixels: Any = DEFAULT_TILED_OVERLAP_PIXELS,
+) -> dict:
+    """「tiled采样」→ 执行计划 + 审计行 + 告警（Lead 在 one_stop 里直接调用）。
+
+    返回 ``{"enabled", "n_tiles", "overlap_pixels", "warnings", "report",
+    "kwargs", "fallback_reason"}``；``kwargs`` 即 ``MiniMaxH3Director.execute(**)``
+    要展开的 ``tiled_n_tiles / tiled_overlap_pixels``。
+    """
+    kwargs = tiled_sampling_kwargs(n_tiles, overlap_pixels)
+    result: dict[str, Any] = {
+        "enabled": bool(kwargs["tiled_n_tiles"] > 1),
+        "n_tiles": int(kwargs["tiled_n_tiles"]),
+        "overlap_pixels": int(kwargs["tiled_overlap_pixels"]),
+        "requested_n_tiles": _safe_int(n_tiles, 0),
+        "warnings": [],
+        "report": "",
+        "kwargs": kwargs,
+        "fallback_reason": "",
+    }
+    try:
+        from .vendor.h3_director.director.spatial_tiled_sampling import (
+            resolve_tiled_request,
+        )
+
+        req = resolve_tiled_request(n_tiles, overlap_pixels)
+        result.update({
+            "enabled": bool(req["enabled"]),
+            "n_tiles": int(req["n_tiles"]),
+            "overlap_pixels": int(req["overlap_pixels"]),
+            "warnings": list(req["warnings"]),
+            "report": str(req["report"]),
+            "kwargs": tiled_sampling_kwargs(req["n_tiles"], req["overlap_pixels"]),
+        })
+    except Exception as exc:  # noqa: BLE001 - vendor 缺失也要给出可执行参数，不静默
+        result["fallback_reason"] = f"{type(exc).__name__}: {exc}"
+        result["report"] = (
+            f"Tiled sampling: {'ON' if result['enabled'] else 'off'}"
+            f"（n_tiles={result['n_tiles']} overlap={result['overlap_pixels']}px；"
+            "vendor 解析函数不可用，按本地钳制规则执行）")
+        if result["enabled"]:
+            result["warnings"].append(
+                f"⚠️ vendor tiled 解析不可用（{result['fallback_reason']}）："
+                "按本地钳制规则传参，执行期若仍失败会抛清晰异常")
+    if result["enabled"]:
+        result["warnings"].append(
+            "tiled 只对主采样器做空间（宽/高）分块；时间维与音频维不分块")
+    return result
+
+
+def tiled_audit_line(n_tiles: Any = 0,
+                     overlap_pixels: Any = DEFAULT_TILED_OVERLAP_PIXELS) -> str:
+    """一行审计文本（默认 0 会明确写 off = 旧版行为）。"""
+    report = normalize_tiled_sampling(n_tiles, overlap_pixels)
+    return str(report["report"])

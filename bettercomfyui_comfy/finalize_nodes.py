@@ -14,6 +14,11 @@
    - 质量：本地启发式四维（叙事流畅/音画同步/节奏合理/无明显跳变）+ 抽帧画质/构图；
    - 占位检测：码率/画面方差过低 → 明确标记"疑似占位/纯色，不是真实生成"。
 
+**硬字幕（ROUND55）**：`字幕模式="硬字幕（程序对齐）"` 时，由
+`bettercomfyui.pipeline.hard_subtitles` 生成**程序化时间轴**（句读切分/字符宽度分配/
+帧网格对齐，24fps 累计误差 <1 帧）并用 ffmpeg ASS 滤镜烧入画面；OCR 仅做烧录后抽帧校验
+（无依赖则 skip）。默认「无」时行为与旧版完全一致。
+
 **诚实边界**：本节点不做转义特效/转场（未实现就不暴露，绝不静默忽略）；"质量是否高"的
 最终判断仍需人工抽检，本节点只给机器可算的证据。
 """
@@ -119,6 +124,21 @@ class BetterComfyUIFinalize:
                                    "tooltip": "0 = 不核对；填了则与输入段数比对。"}),
                 "每段计划时长_秒": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 3600.0,
                                           "tooltip": "0 = 不核对；填了则校验总时长一致性。"}),
+                # ---------------- ROUND55：硬字幕（程序化时间轴，防文字漂移） ----------------
+                "字幕模式": (["无（保持旧行为）", "自动字幕（未实现，保持旧行为）", "硬字幕（程序对齐）"], {
+                    "default": "无（保持旧行为）",
+                    "tooltip": "无/自动字幕 = 与旧版完全一致（不烧字幕）；\n"
+                               "硬字幕（程序对齐）= 由程序生成时间轴并用 ffmpeg 烧入画面（不可关闭、不漂移）。"}),
+                "字幕台词": ("STRING", {"default": "", "multiline": True,
+                                      "tooltip": "硬字幕模式的台词：每行一句；\n"
+                                                 "也接受 JSON 数组：[{\"text\": \"台词\", \"duration_s\": 2.0}]"}),
+                "字幕字号": ("INT", {"default": 42, "min": 12, "max": 120,
+                                     "tooltip": "硬字幕字号（按视频分辨率自适应缩放）。"}),
+                "字幕字体文件": ("STRING", {"default": "",
+                                         "tooltip": "留空 = 系统字体回退（msyh 微软雅黑 → DengXian 等线 → SimHei/SimSun / WenQuanYi）。"}),
+                "字幕位置": (["底部", "顶部"], {"default": "底部"}),
+                "OCR自检": ("BOOLEAN", {"default": False,
+                                       "tooltip": "烧录后抽帧 OCR 校验（需 tesseract 或 easyocr；没有则跳过并写明，不阻断）。"}),
             },
         }
 
@@ -181,7 +201,10 @@ class BetterComfyUIFinalize:
     def run(self, 项目: str, 段视频路径列表: str, 输出文件名: str = "",
             编码CRF: int = 18, 完整性检查: str = CHECK_SCOPES[0],
             自动发现最新视频: bool = False, 发现时间窗_分钟: int = 30,
-            计划段数: int = 0, 每段计划时长_秒: float = 0.0):
+            计划段数: int = 0, 每段计划时长_秒: float = 0.0,
+            字幕模式: str = "无（保持旧行为）", 字幕台词: str = "",
+            字幕字号: int = 42, 字幕字体文件: str = "", 字幕位置: str = "底部",
+            OCR自检: bool = False):
         _NodeError, _config, _orch, _orch_repo_root, _store_for_project = _orch_helpers()
         from bettercomfyui.pipeline import core
 
@@ -230,7 +253,12 @@ class BetterComfyUIFinalize:
             spliced = files[0]
 
         # ---- 2) 封装（ENC） ----
-        final_name = (输出文件名 or "").strip() or f"成片_{ts}.mp4"
+        # ROUND58 安全修复：输出名只取 basename，禁止 ../ 穿越到项目 output 目录之外。
+        raw_name = (输出文件名 or "").strip() or f"成片_{ts}.mp4"
+        final_name = Path(str(raw_name).replace("\\", "/")).name
+        final_name = "".join(ch for ch in final_name if ch.isprintable())
+        if final_name in ("", ".", ".."):
+            final_name = f"成片_{ts}.mp4"
         if not final_name.lower().endswith(".mp4"):
             final_name += ".mp4"
         final_path = Path(paths.output_dir) / final_name
@@ -244,6 +272,105 @@ class BetterComfyUIFinalize:
             raise _NodeError(f"成片封装失败：{type(exc).__name__}: {exc}") from exc
         if not Path(final_path).is_file():
             raise _NodeError(f"封装流程结束但没有成片文件：{final_path}")
+
+        # ---- 2.5) 硬字幕（ROUND55：程序化时间轴 + ffmpeg 烧录；默认「无」不改旧行为） ----
+        subtitle_info: dict[str, Any] = {
+            "mode": str(字幕模式),
+            "enabled": False,
+            "note": "默认「无/自动字幕」保持旧行为（不烧字幕）",
+        }
+        if str(字幕模式).startswith("硬字幕"):
+            from bettercomfyui.pipeline import hard_subtitles as _hard_sub
+
+            subtitle_warnings: list[str] = []
+            entries = _hard_sub.entries_from_text(字幕台词)
+            if not entries:
+                raise _NodeError(
+                    "硬字幕模式需要「字幕台词」：每行一句台词，或 JSON 数组 "
+                    "[{\"text\": \"台词\", \"duration_s\": 2.0}]（空输入无法生成时间轴）。")
+            # 先探测编码后时长，作为程序化时间轴的总时长基准
+            encoded_meta = _parse_media(Path(final_path))
+            encoded_duration = float(encoded_meta.get("duration_s") or expected_duration or 0.0)
+            if encoded_duration <= 0:
+                raise _NodeError(f"硬字幕失败：无法确定成片时长（{final_path}）")
+            encoded_backup = workdir / f"encoded_before_subtitles_{ts}.mp4"
+            shutil.move(str(final_path), str(encoded_backup))
+            try:
+                font_path = (字幕字体文件 or "").strip() or None
+                font_file, font_family = _hard_sub.pick_font(font_path, subtitle_warnings)
+                cues = _hard_sub.build_timeline(
+                    entries, fps=24.0, total_duration_s=encoded_duration)
+                burned = _hard_sub.burn_hard_subtitles(
+                    encoded_backup, entries, Path(final_path),
+                    font_path=font_path,
+                    font_size=int(字幕字号),
+                    margin_v=64 if str(字幕位置) != "顶部" else 48,
+                    alignment=2 if str(字幕位置) != "顶部" else 8,
+                    style="白字黑边",
+                    warnings=subtitle_warnings,
+                    total_duration_s=encoded_duration,
+                )
+                final_path = Path(burned)
+            except _hard_sub.SubtitleError as exc:
+                # 恢复编码版本，再抛清晰错误（不留下半成品当"成片"）
+                shutil.move(str(encoded_backup), str(final_path))
+                raise _NodeError(f"硬字幕烧录失败（已保留无字幕成片）：{exc}") from exc
+            except Exception as exc:  # noqa: BLE001 - 未预期异常同样要可见
+                shutil.move(str(encoded_backup), str(final_path))
+                raise _NodeError(
+                    f"硬字幕处理异常（已保留无字幕成片）：{type(exc).__name__}: {exc}") from exc
+            subtitle_info = {
+                "mode": str(字幕模式),
+                "enabled": True,
+                "engine": "ffmpeg ass filter + 程序化时间轴",
+                "lines": sum(len(c.lines) for c in cues),
+                "screens": len(cues),
+                "frames": [{"start": c.start_frame, "end": c.end_frame,
+                            "lines": list(c.lines)} for c in cues],
+                "font_file": str(font_file) if font_file else None,
+                "font_family": font_family,
+                "font_size": int(字幕字号),
+                "position": str(字幕位置),
+                "warnings": list(subtitle_warnings),
+            }
+            if OCR自检:
+                try:
+                    ocr_result = _hard_sub.verify_with_ocr(
+                        Path(final_path), cues, warnings=subtitle_warnings)
+                    subtitle_info["ocr"] = {
+                        "available": bool(ocr_result.get("available")),
+                        "engine": ocr_result.get("engine"),
+                        "checked": int(ocr_result.get("checked") or 0),
+                        "matched": int(ocr_result.get("matched") or 0),
+                        "ratio": ocr_result.get("ratio"),
+                        "reason": ocr_result.get("reason"),
+                    }
+                    subtitle_info["warnings"] = list(subtitle_warnings)
+                except Exception as exc:  # noqa: BLE001 - OCR 仅校验，失败不阻断
+                    subtitle_info["ocr"] = {"available": False,
+                                            "reason": f"OCR 自检异常（不阻断）：{type(exc).__name__}: {exc}"}
+            audit_subtitle_lines = [
+                f"字幕模式：硬字幕（程序对齐）｜屏幕 {subtitle_info['screens']} 条 / 文本行 {subtitle_info['lines']} 行",
+                f"字幕字体：{font_family or 'libass 默认'}（{font_file or '未找到字体文件，已降级'}）"
+                f"｜字号 {int(字幕字号)}｜位置 {字幕位置}",
+                "字幕时间轴：程序生成（句读切分 + 字符宽度分配 + 帧网格对齐），非模型/ASR 自由发挥",
+            ]
+            ocr_info = subtitle_info.get("ocr")
+            if OCR自检 and ocr_info:
+                if ocr_info.get("available"):
+                    audit_subtitle_lines.append(
+                        f"OCR 自检（仅校验）：{ocr_info.get('engine')} 命中 "
+                        f"{ocr_info.get('matched')}/{ocr_info.get('checked')}"
+                        f"（{float(ocr_info.get('ratio') or 0):.0%}）")
+                else:
+                    audit_subtitle_lines.append(
+                        f"OCR 自检：skip（{ocr_info.get('reason') or 'OCR 不可用'}）")
+            elif not OCR自检:
+                audit_subtitle_lines.append("OCR 自检：未开启（可选；开启后仅做烧录后校验，不参与生成）")
+            for warning in subtitle_warnings:
+                audit_subtitle_lines.append(f"⚠️ 字幕提示：{warning}")
+        else:
+            audit_subtitle_lines = [f"字幕：{字幕模式}（保持旧行为，不烧录硬字幕）"]
 
         # ---- 3) 自检 ----
         final_meta = _parse_media(Path(final_path))
@@ -303,6 +430,7 @@ class BetterComfyUIFinalize:
                      "blackdetect_segments": black_count,
                      "freezedetect_segments": freeze_count,
                      "silencedetect_segments": silence_starts},
+            "subtitles": subtitle_info,
             "auto_discovered": bool(auto_discovered),
             "auto_discovered_files": [str(p) for p in auto_discovered],
             "placeholder_flags": placeholder_flags,
@@ -317,7 +445,8 @@ class BetterComfyUIFinalize:
 
         report_path = Path(paths.project_dir) / "review" / f"finalize_{ts}.json"
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps({"integrity": integrity, "quality": quality},
+        report_path.write_text(json.dumps({"integrity": integrity, "quality": quality,
+                                          "subtitles": subtitle_info},
                                           ensure_ascii=False, indent=2), encoding="utf-8")
 
         audit_lines = [
@@ -333,6 +462,7 @@ class BetterComfyUIFinalize:
             f"规格：{final_meta.get('width')}x{final_meta.get('height')} "
             f"{final_meta.get('fps')}fps 码率 {final_meta.get('bitrate_bps')} "
             f"音轨 {'有' if final_meta['has_audio'] else '**无**'}",
+            *audit_subtitle_lines,
             f"剪辑性：黑帧 {black_count} 段 / 冻帧 {freeze_count} 段 / 静音 {silence_starts} 段"
             f"（检查方式：{完整性检查}）",
             f"质量评分（本地启发式）：{quality_scores}",

@@ -1,0 +1,235 @@
+{
+  "id": "bcu-fusion-smart",
+  "revision": 0,
+  "last_node_id": 3,
+  "last_link_id": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BetterComfyUIProject",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        300,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "project_id",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 0
+        },
+        {
+          "name": "info",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 1
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BetterComfyUIProject"
+      },
+      "widgets_values": [
+        "打开或创建",
+        "我的短剧",
+        "",
+        false
+      ],
+      "title": "① 选项目（可先点 Queue 创建）"
+    },
+    {
+      "id": 2,
+      "type": "BetterComfyUIFusionGroups",
+      "pos": [
+        40,
+        320
+      ],
+      "size": [
+        300,
+        240
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "groups",
+          "type": "MMX_DIR_GROUP",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "组摘要",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 1
+        },
+        {
+          "name": "审计JSON",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 2
+        },
+        {
+          "name": "首段种子",
+          "type": "INT",
+          "links": [],
+          "slot_index": 3
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BetterComfyUIFusionGroups"
+      },
+      "widgets_values": [
+        "",
+        "{\n  \"chapters\": [\n    {\n      \"title\": \"第一章\",\n      \"assets\": [\n        {\n          \"id\": \"c1\",\n          \"type\": \"CHARACTER\",\n          \"name\": \"主角\"\n        }\n      ],\n      \"segments\": [\n        {\n          \"prompt\": \"主角走进画面，镜头缓慢推进\",\n          \"duration_s\": 5\n        },\n        {\n          \"prompt\": \"主角停下，转头看向镜头\",\n          \"duration_s\": 5\n        }\n      ]\n    }\n  ]\n}",
+        "r2v 参考生视频",
+        5.0,
+        6,
+        true,
+        -1
+      ],
+      "title": "② 剧本 → 导演组（只取已 LOCK 素材）"
+    },
+    {
+      "id": 3,
+      "type": "MiniMaxH3Director",
+      "pos": [
+        520,
+        60
+      ],
+      "size": [
+        300,
+        600
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "i2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": null
+        },
+        {
+          "name": "r2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 0
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [],
+          "slot_index": 1
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [],
+          "slot_index": 2
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": [],
+          "slot_index": 3
+        },
+        {
+          "name": "source_images",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 4
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 5
+        },
+        {
+          "name": "images_pre_refine",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 6
+        },
+        {
+          "name": "images_pre_face_refine",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 7
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3Director"
+      },
+      "widgets_values": [
+        "r2v",
+        "A cinematic scene with natural motion and synchronized ambience",
+        "采样设置",
+        1.0,
+        0,
+        24.0,
+        864,
+        480,
+        864,
+        124,
+        "",
+        "高级采样",
+        25,
+        "euler",
+        "simple",
+        12.0,
+        3.0,
+        "性能",
+        true,
+        false,
+        false,
+        "raw",
+        false,
+        false,
+        ""
+      ],
+      "title": "③ 导演台引擎（真实生成在这里）"
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      3,
+      1,
+      "MMX_DIR_GROUP"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 1.0,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

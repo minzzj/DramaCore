@@ -17,18 +17,22 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Callable, Mapping
 
 from ._conf import cfg_bool, cfg_get, cfg_str
 from .errors import PromptDependencyError
+from .normalize import normalize_name
 
 __all__ = [
     "SYSTEM_PROMPT_PRESETS",
     "DEFAULT_PRESET",
+    "OUTPUT_CONTRACT_VERSION",
     "build_asset_manifest",
     "build_system_prompt",
     "build_user_prompt",
     "build_prompt_messages",
+    "parse_manifest_asset_names",
 ]
 
 
@@ -44,6 +48,10 @@ _ROLE_BLOCK = (
 )
 
 DEFAULT_PRESET = "default"
+
+#: 系统提示词里写明的输出契约版本（与 ``prompt/validate.py`` 的适配逻辑对应）。
+#: 出现解析异常时，先核对系统提示词里这个版本与解析器版本是否一致。
+OUTPUT_CONTRACT_VERSION = "bettercomfyui.script-json/v1"
 
 SYSTEM_PROMPT_PRESETS: dict[str, str] = {
     "default": _ROLE_BLOCK,
@@ -111,14 +119,67 @@ _EMPTY_LIBRARY_RULE = """【素材存在性规则（必须遵守）】
 2. 你**只能**输出本次新增的素材；**禁止**输出「已存在 / 不存在」之类的判断结论，
    存在性判断由程序完成。"""
 
-_OUTPUT_RULES_JSON = """【输出格式】
-只输出一个合法 JSON 对象（不要 Markdown 说明文字）。结构必须严格如下：
+_OUTPUT_RULES_JSON = """【输出契约 __CONTRACT_VERSION__（最高优先级）】
+只输出一个 JSON 对象，不要输出解释文字；可以放在 ```json 围栏里，但围栏外不得有其它内容。
+**本段优先于上文任何 JSON 格式要求**（包括 H3 提示词手册的【输出格式】）：
+- 视频提示词必须写进 chapters[].segments[].prompt。H3 三字段请按
+  `integrated_multimodal_description: …`、`overall_soundscape: …`、
+  `non_diegetic_music: …` 三行合并进同一个 prompt 字符串（也可以只写一段完整提示词）。
+- 素材图提示词必须写进 assets[]（asset_type 只能是 CHARACTER / SCENE / PROP / SHOT）。
+- 禁止使用 H3 手册的顶层结构 task_type / video_prompt / material_image_prompts /
+  character_sheet：程序按下面的结构取素材与分镜，顶层换成手册结构会导致素材/分镜识别失败。
 {schema}
-字段要求：
-- assets[].id 在本批输出内唯一；assets[].name 不得重复（匹配按名称归一化后进行）。
-- assets[].asset_type 只能是：CHARACTER / SCENE / PROP / SHOT。
-- chapters[].segments[].prompt 非空，且分镜的 asset_refs 只能引用本批 assets 的 id/name
-  或上面清单里的既有素材名，不得引用不存在的素材。"""
+字段规则：
+- 顶层必须有 assets（数组，可为空）与 chapters（非空数组）；title 可选。
+- assets[]：id 唯一（建议 A1、A2…）、asset_type 必填、name 必填且不得重复、prompt 必填；
+  可选 negative_prompt / description / source / library_scope。
+- chapters[]：chapter_id（CH001 形式，可省略）、title/summary 可选、segments 非空。
+- segments[]：prompt 必填；asset_refs 必填（数组，可为空）；
+  可选 segment_index、duration_s、first_frame_ref、last_frame_ref。
+- asset_refs 只能引用本批 assets 的 id/name 或【素材存在性规则】清单里的原始名称。
+- 输出前自检：整个响应必须能被 json.loads 解析；assets 与 chapters 必须是数组；
+  每个 asset 都有 id/asset_type/name/prompt；每个 segment 都有 prompt 与 asset_refs；
+  被截断时先缩短描述再重发完整 JSON，禁止输出半个对象。"""
+
+_ASSET_CATEGORY_RULE = (
+    "【素材类别】必须覆盖剧本中出现的：人物/角色（CHARACTER）、场景（SCENE）、"
+    "物品/道具（PROP）、分镜/镜头（SHOT）。"
+)
+
+#: 输出语言/分镜粒度在配置里是短代码（``zh`` / ``shot``），但提示词里要写人话，
+#: 否则 DeepSeek 会看到「输出语言：zh」「分镜粒度：shot」这种半截指令。
+_LANGUAGE_LABELS: dict[str, str] = {
+    "zh": "中文",
+    "zh-cn": "中文",
+    "zh_cn": "中文",
+    "cn": "中文",
+    "chinese": "中文",
+    "中文": "中文",
+    "en": "English",
+    "en-us": "English",
+    "en_us": "English",
+    "english": "English",
+    "英文": "英文",
+}
+_GRANULARITY_LABELS: dict[str, str] = {
+    "shot": "按镜头",
+    "shots": "按镜头",
+    "按镜头": "按镜头",
+    "scene": "按场景",
+    "按场景": "按场景",
+    "segment": "按分镜段",
+    "segments": "按分镜段",
+    "按分镜段": "按分镜段",
+}
+
+
+def _localized(value: Any, mapping: Mapping[str, str], default: str) -> str:
+    """把配置里的短代码翻译成提示词里可读的中文/英文标签。"""
+    text = str(value or "").strip()
+    if not text:
+        return default
+    return mapping.get(text.lower(), text)
+
 
 _OUTPUT_RULES_DELIMITED = """【输出格式】
 使用分隔符文本输出，程序会自动分段。格式：
@@ -146,6 +207,14 @@ _LOCAL_SIMPLIFIED = """【简化要求（本地模型）】
 2. 只输出新增素材，清单里已有的不要输出。
 3. 不要输出「已存在 / 不存在」的判断。
 4. name 必须逐字照抄清单里的写法。"""
+
+
+def _json_contract() -> str:
+    """把契约版本与结构骨架填进输出契约文本。"""
+    return (
+        _OUTPUT_RULES_JSON.replace("__CONTRACT_VERSION__", OUTPUT_CONTRACT_VERSION)
+        .replace("{schema}", _SCHEMA_SKELETON)
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +256,61 @@ def build_asset_manifest(
     return text or ""
 
 
+#: 既有素材清单的行格式（``store.inject`` 是制表符分隔：类型 / 序号 / 名称 / 锁定状态）。
+_MANIFEST_TAB_MIN_COLUMNS = 3
+_MANIFEST_ROW_RE = re.compile(
+    r"^(CHARACTER|SCENE|PROP|SHOT|AUDIO|VIDEO)\s+#?\s*(\d+)\s+(.+)$",
+    re.IGNORECASE,
+)
+
+
+def parse_manifest_asset_names(manifest: str) -> list[str]:
+    """从既有素材清单文本里提取素材名（去重、保持出现顺序）。
+
+    ## 为什么需要它（ROUND58）
+
+    系统提示词的【素材存在性规则】明确允许分镜的 ``asset_refs`` **逐字照抄清单里的
+    既有素材名**；但 ``generate_script_prompts`` 之前没有把清单名传给
+    ``validate_script(existing_assets=...)``，于是这类引用全部被判为
+    ``invalid_reference`` 并被丢弃 —— 系统提示词说「可以引用」，解析器却说「不存在」，
+    这是提示词与解析器的契约不一致。
+
+    本函数只解析**程序自己生成**的清单文本（``store.inject`` 的格式），
+    不猜测素材是否存在于库中：允许引用 ≠ 认定存在，最终存在性仍由
+    :mod:`bettercomfyui.prompt.match` 判定（R1）。
+    """
+    names: list[str] = []
+    for raw_line in str(manifest or "").splitlines():
+        line = raw_line.lstrip("\ufeff").strip()
+        if not line or line.startswith("["):
+            continue
+        name = ""
+        columns = [column.strip() for column in line.split("\t")]
+        if (
+            len(columns) >= _MANIFEST_TAB_MIN_COLUMNS
+            and columns[1].isdigit()
+        ):
+            name = columns[2]
+        else:
+            match = _MANIFEST_ROW_RE.match(line)
+            if match:
+                # 尾部可能还有「LOCKED v1 MODEL_PASS」：按 2+ 空格切掉。
+                tail = re.split(r"\s{2,}|\t", match.group(3).strip())[0].strip()
+                name = tail
+        if name:
+            names.append(name)
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for name in names:
+        key = normalize_name(name)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        unique.append(name)
+    return unique
+
+
 # ---------------------------------------------------------------------------
 # 提示词组装
 # ---------------------------------------------------------------------------
@@ -210,6 +334,15 @@ def _resolve_template(cfg: Any, template: str | None) -> str:
     key = text.strip().lower()
     if not key:
         return SYSTEM_PROMPT_PRESETS[DEFAULT_PRESET]
+    if key in ("h3_handbook", "h3_core"):
+        try:
+            from .h3_handbook import resolve_preset  # noqa: PLC0415
+
+            handbook = resolve_preset(key)
+            if handbook:
+                return handbook
+        except Exception:  # noqa: BLE001 - 手册加载失败时退回默认预置，不阻断
+            pass
     if key in SYSTEM_PROMPT_PRESETS:
         return SYSTEM_PROMPT_PRESETS[key]
     return text
@@ -239,7 +372,13 @@ def build_system_prompt(
     template: str | None = None,
     local_model: bool | None = None,
 ) -> str:
-    """组装系统提示词（模板 + 既有素材注入 + 输出格式约束）。"""
+    """组装系统提示词（模板 + 既有素材注入 + 输出契约）。
+
+    ROUND58：输出契约永远追加在模板之后，并明确写出「本段优先于上文任何 JSON
+    格式要求」—— 这样即使用户把 H3 提示词手册（448 字精简版或 4 万字全文）
+    设成系统提示词，DeepSeek 也不会把 ``video_prompt/material_image_prompts``
+    的顶层结构当成最终输出，解析器就能稳定拿到 ``chapters/assets``。
+    """
     parts: list[str] = [_resolve_template(cfg, template).strip()]
 
     if manifest.strip():
@@ -253,19 +392,19 @@ def build_system_prompt(
         parts.append(_LOCAL_SIMPLIFIED)
         if fmt == "delimited":
             parts.append(_OUTPUT_RULES_DELIMITED)
-        elif fmt == "json":
-            parts.append("【输出格式】只输出一个合法 JSON 对象。\n{schema}".replace("{schema}", _SCHEMA_SKELETON))
+        else:
+            # 本地模型 + 默认 auto 也必须拿到完整契约（旧代码 auto 时什么都不加）。
+            parts.append(_json_contract())
     else:
         if fmt == "delimited":
             parts.append(_OUTPUT_RULES_DELIMITED)
         else:
-            parts.append(_OUTPUT_RULES_JSON.replace("{schema}", _SCHEMA_SKELETON))
-        parts.append(
-            "【素材类别】必须覆盖剧本中出现的：人物/角色（CHARACTER）、场景（SCENE）、"
-            "物品/道具（PROP）、分镜/镜头（SHOT）。"
-        )
+            parts.append(_json_contract())
+        parts.append(_ASSET_CATEGORY_RULE)
 
-    language = cfg_str(cfg, "prompt.output_language", "中文")
+    language = _localized(
+        cfg_str(cfg, "prompt.output_language", "中文"), _LANGUAGE_LABELS, "中文"
+    )
     if language:
         parts.append(f"【输出语言】{language}。")
     return "\n\n".join(p for p in parts if p)
@@ -282,8 +421,14 @@ def build_user_prompt(
     if not isinstance(script_text, str) or not script_text.strip():
         raise PromptDependencyError("script_text 必须是非空字符串（剧本正文）")
 
-    granularity = cfg_str(cfg, "prompt.story_granularity", "按镜头")
-    language = cfg_str(cfg, "prompt.output_language", "中文")
+    granularity = _localized(
+        cfg_str(cfg, "prompt.story_granularity", "按镜头"),
+        _GRANULARITY_LABELS,
+        "按镜头",
+    )
+    language = _localized(
+        cfg_str(cfg, "prompt.output_language", "中文"), _LANGUAGE_LABELS, "中文"
+    )
     fmt = _output_format(cfg)
 
     header_lines = [

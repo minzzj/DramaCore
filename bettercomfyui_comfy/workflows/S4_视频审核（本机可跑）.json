@@ -1,0 +1,213 @@
+{
+  "last_node_id": 5,
+  "last_link_id": 4,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BetterComfyUIVideoReview",
+      "pos": [
+        -900,
+        150
+      ],
+      "size": [
+        560,
+        560
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "结论",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "段审核JSON",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "整片审核JSON",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "需重生成段",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "审计报告",
+          "type": "STRING",
+          "links": [
+            4
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "我的短剧",
+        "",
+        10.0,
+        "段级 + 整片（推荐）",
+        "本地启发式（真实计算）",
+        -1.0,
+        -1.0,
+        "按项目配置",
+        "",
+        false,
+        55.0
+      ]
+    },
+    {
+      "id": 2,
+      "type": "PreviewAny",
+      "pos": [
+        40,
+        150
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 1
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "结论"
+    },
+    {
+      "id": 3,
+      "type": "PreviewAny",
+      "pos": [
+        40,
+        450
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 2
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "段审核JSON（R_seg/CNT2/边界）"
+    },
+    {
+      "id": 4,
+      "type": "PreviewAny",
+      "pos": [
+        40,
+        750
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 3
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "整片审核JSON（R_full/策略）"
+    },
+    {
+      "id": 5,
+      "type": "PreviewAny",
+      "pos": [
+        40,
+        1050
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "审计报告"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      1,
+      1,
+      3,
+      0,
+      "STRING"
+    ],
+    [
+      3,
+      1,
+      2,
+      4,
+      0,
+      "STRING"
+    ],
+    [
+      4,
+      1,
+      4,
+      5,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

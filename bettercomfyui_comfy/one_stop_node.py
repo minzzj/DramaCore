@@ -55,6 +55,28 @@ def _safe_output_name(name: str) -> str:
     return base
 
 
+_DIALOGUE_RE = re.compile(r'[「“"]([^」”"]{2,80})[」”"]')
+
+
+def _extract_dialogue_lines(text: str, max_lines: int = 200) -> list[str]:
+    """从剧本中按引号提取台词（「」/“”/""），供硬字幕程序化时间轴使用。
+
+    确定性规则提取（不靠模型/ASR）；无引号台词返回空列表，由调用方回退并告警。
+    """
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in str(text or "").splitlines():
+        for m in _DIALOGUE_RE.finditer(raw):
+            line = str(m.group(1) or "").strip()
+            if not line or line in seen:
+                continue
+            seen.add(line)
+            out.append(line)
+            if len(out) >= max_lines:
+                return out
+    return out
+
+
 _NEGATIVE = "低质量，模糊，变形，水印，文字，多手多脚"
 
 _FULL_POLICIES = ["按项目配置", "阻止输出", "降级输出"]
@@ -561,7 +583,36 @@ class BetterComfyUIOneStop:
         vae_names = _filename_list("vae")
         lora_names = [""] + _filename_list("loras")
         ckpts = _filename_list("checkpoints")
+
+        def _pick(names: list[str], *prefer: str) -> str:
+            for token in prefer:
+                for n in names:
+                    if token.lower() in str(n).lower():
+                        return n
+            return names[0] if names else ""
+
+        _default_task = _default_task_type()
+        if "r2v" in _default_task:
+            _unet_pref = ("ref2va", "r2v", "ref2v")
+            _clip_pref = ("qwen3vl", "minimax", "qwen")
+        elif "fl2v" in _default_task:
+            _unet_pref = ("fl2va", "fl2v")
+            _clip_pref = ("qwen3vl", "minimax", "qwen")
+        elif "i2v" in _default_task:
+            _unet_pref = ("i2va", "i2v")
+            _clip_pref = ("qwen3vl", "minimax", "qwen")
+        else:
+            _unet_pref = ("t2v", "t2va")
+            _clip_pref = ("qwen3vl", "minimax", "qwen")
+        default_unet = _pick(unets, *_unet_pref)
+        default_clip = _pick(clip_names, *_clip_pref)
+        default_video_vae = _pick(vae_names, "video_vae", "video", "h3_video")
+        default_audio_vae = _pick(vae_names, "audio_vae", "audio", "h3_audio")
         default_ckpt = next((c for c in ckpts if "RealVis" in c), ckpts[0] if ckpts else "")
+        if not default_video_vae and vae_names:
+            default_video_vae = vae_names[0]
+        if not default_audio_vae and vae_names:
+            default_audio_vae = next((v for v in vae_names if v != default_video_vae), vae_names[0])
         detectors = _face_detector_options()
         return {
             "required": {
@@ -572,22 +623,30 @@ class BetterComfyUIOneStop:
                     "tooltip": "可选：多段剧本按顺序自动生成（每段一次 Everything API）。"
                                "用「多段剧本分隔符」切分；设置后忽略上面的「剧本」。"}),
                 "多段剧本分隔符": ("STRING", {"default": "---",
-                    "tooltip": "多段剧本分隔符：仅由该字符串构成的整行（如 --- 或 ===）用于切分章节。"}),
+                    "tooltip": "旧版兼容：仅由该字符串构成的整行（如 --- 或 ===）用于切分章节。"}),
+                "多段剧本列表JSON": ("STRING", {"multiline": True, "default": "",
+                    "tooltip": "UI「添加一段」维护的字符串数组（每项一段剧本/一章）；"
+                               "非空时优先于「多段剧本」文本，逐段顺序生成（每段 1 次 API）。"}),
                 "项目": ("STRING", {"default": "剧核试用",
                                     "tooltip": "项目显示名或 32 位 id；素材库与输出都写到这里。"}),
                 "输出文件名": ("STRING", {"default": "大节点成片.mp4"}),
                 # ---------------- 模型 ----------------
-                "视频UNET": (unets or [""], {"tooltip": "MiniMax H3 UNET（ComfyUI diffusion_models）"}),
-                "CLIP名": (clip_names or [""], {"tooltip": "CLIPLoader type=minimax（qwen3vl）"}),
-                "视频VAE": (vae_names or [""], {"tooltip": "minimax_h3_video_vae"}),
-                "音频VAE": (vae_names or [""], {"tooltip": "minimax_h3_audio_vae（r2v/v2v/rv2v 必需）"}),
+                "视频UNET": (unets or [""], {"default": default_unet,
+                                             "tooltip": "MiniMax H3 UNET（ComfyUI diffusion_models）；默认按任务族自动选"}),
+                "CLIP名": (clip_names or [""], {"default": default_clip,
+                                              "tooltip": "CLIPLoader type=minimax（qwen3vl）"}),
+                "视频VAE": (vae_names or [""], {"default": default_video_vae,
+                                               "tooltip": "minimax_h3_video_vae（视频 VAE）"}),
+                "音频VAE": (vae_names or [""], {"default": default_audio_vae,
+                                               "tooltip": "minimax_h3_audio_vae（r2v/v2v/rv2v 必需）"}),
                 "视频LoRA": (lora_names, {"default": ""}),
                 "LoRA强度": ("FLOAT", {"default": 0.75, "min": 0.0, "max": 2.0, "step": 0.01}),
                 "图像模型": (ckpts or [""], {"default": default_ckpt,
                                             "tooltip": "素材生图用的 SDXL checkpoint"}),
                 "生成素材图": ("BOOLEAN", {"default": True,
                                           "tooltip": "True = 节点内部生成素材参考图并走审核 LOCK；"
-                                                     "False = 只用提示词出片（无参考图）"}),
+                                                     "False = 只用提示词出片（无参考图）。默认值随"
+                                                     "「图像模型」是否可用自动设置（无 checkpoint 时关闭并审计提示）"}),
                 "素材最多生成个数": ("INT", {"default": 12, "min": 0, "max": 64,
                                      "tooltip": "本次最多生成/复用多少个素材候选；可到 64。导演台参考图上限 9，超出部分会生成并 LOCK 但只挂前 9 张（审计告警）。"}),
                 "素材审核轮数": ("INT", {"default": 3, "min": 1, "max": 10,
@@ -669,8 +728,11 @@ class BetterComfyUIOneStop:
                     "tooltip": "JP6：低=缩小批次+批间卸载；中=默认；高=关段间清理、大批次"}),
                 "剪枝模型": ("BOOLEAN", {"default": True,
                                           "tooltip": "JP7：批次间卸载模型并清缓存（等效显存剪枝；模型文件本身的剪枝版需用户选择）"}),
-                "tiled采样": ("INT", {"default": 0, "min": 0, "max": 16,
-                                       "tooltip": "O5：>1 时尝试 vendor 空间分块采样接口；当前 vendor 执行器自建 sampler，未接线会明确记录"}),
+                "tiled采样": ("INT", {"default": 0, "min": 0, "max": 8,
+                                       "tooltip": "O5：0=关闭（默认，旧行为不变）；>1 对主采样器空间分块"
+                                                  "（vendor 上限 8；SelfLift 段/Refine 二采不分块）"}),
+                "tiled重叠像素": ("INT", {"default": 64, "min": 0, "max": 2048,
+                                          "tooltip": "空间分块的重叠像素（仅 tiled采样>1 时生效）"}),
                 "显存清理_段间": ("BOOLEAN", {"default": True}),
                 "显存清理_二采前": ("BOOLEAN", {"default": False}),
                 "显存清理_修脸前": ("BOOLEAN", {"default": False}),
@@ -709,10 +771,32 @@ class BetterComfyUIOneStop:
                                                           "（pipeline.splice/encode+自检）拼接封装；"
                                                           "False = 节点内 ffmpeg 直编整片"}),
                 "剪辑CRF": ("INT", {"default": 18, "min": 0, "max": 51}),
-                "转场": (["无", "淡入淡出"], {"default": "无",
-                                        "tooltip": "ENC2：段间 xfade 交叉淡化 0.5s（真实现，失败会明确记录）"}),
-                "字幕": (["无", "自动字幕"], {"default": "无",
-                                        "tooltip": "ENC3：把各段提示词生成 SRT 并真烧录到画面"}),
+                "转场": (["无", "淡入淡出", "叠化", "黑场", "白场",
+                         "左滑", "右滑", "上滑", "下滑",
+                         "擦除左", "擦除右", "擦除上", "擦除下",
+                         "圆开", "圆闭", "像素化", "模糊", "推近",
+                         "AI自动（按剧情）"],
+                        {"default": "AI自动（按剧情）",
+                         "tooltip": "ENC2：段间转场（xfade 真实现）。选「AI自动（按剧情）」时"
+                                    "按段落内容/连续性/场景切换自动决定哪里转/哪里不转。"}),
+                "转场时长_秒": ("FLOAT", {"default": 0.5, "min": 0.0, "max": 2.0, "step": 0.1,
+                                        "tooltip": "每处转场的重叠时长；0=硬切"}),
+                "片头片尾": (["无", "片头", "片尾", "片头+片尾"], {"default": "无",
+                            "tooltip": "片头=标题卡；片尾=片尾文字/演职员/出品方卡；"
+                                       "由 Finalize 在成片首尾拼接，失败会如实告警"}),
+                "片头文字": ("STRING", {"default": "剧核 DramaCore",
+                            "tooltip": "片头标题（留空用项目/剧本默认标题；不伪造成功）"}),
+                "片尾文字": ("STRING", {"default": "剧终",
+                            "tooltip": "片尾标题（留空用默认片尾文字）"}),
+                "片尾演职员": ("STRING", {"multiline": True, "default": "剧核 DramaCore 出品",
+                            "tooltip": "片尾演职员/出品方/版权行，每行一条"}),
+                "字幕台词": ("STRING", {"multiline": True, "default": "",
+                            "tooltip": "硬字幕文本来源（每行一句；可空=回退用视频提示词并告警）。"
+                                       "程序只做时间轴对齐，不让模型/ASR 决定字幕内容。"}),
+                "字幕": (["硬字幕（程序对齐）", "无", "自动字幕"], {"default": "硬字幕（程序对齐）",
+                                        "tooltip": "ENC3：自动字幕=各段提示词生成 SRT 烧录；"
+                                                   "硬字幕（程序对齐）=按段/台词程序化时间轴，"
+                                                   "不靠模型/ASR，避免文字漂移"}),
                 "水印": (["无", "文字水印"], {"default": "无",
                                         "tooltip": "ENC4：右下角文字水印 PNG（真叠加）"}),
                 "水印文字": ("STRING", {"default": "剧核 DramaCore"}),
@@ -724,13 +808,16 @@ class BetterComfyUIOneStop:
                 # ---------------- H. 运行/审核阈值 ----------------
                 "系统提示词选择": (["跟随面板配置（推荐）"] + list(_prompt_choices()), {
                     "default": "跟随面板配置（推荐）",
-                    "tooltip": "跟随面板：用右侧「剧核」面板保存的默认系统提示词；也可在节点上强制指定。"}),
+                    "tooltip": ("跟随面板：用右侧「剧核」面板保存的默认系统提示词；"
+                                "面板为空时默认加载 ROUND58《H3 提示词工程精简版》V1.0（2026-10，"
+                                "12,890 字：编译器 Master + 素材图提示词 + 片段库）；"
+                                "也可在节点上强制指定——「H3 手册（完整，历史版）」等旧版仍可选。")}),
                 "自定义系统提示词": ("STRING", {"multiline": True, "default": "",
                     "tooltip": "非空时覆盖系统提示词选择（只对真实 API 模式生效）。"}),
                 "输出语言": (["跟随面板配置（推荐）", "中文", "英文"], {
-                    "default": "跟随面板配置（推荐）"}),
+                    "default": "中文"}),
                 "分镜粒度": (["跟随面板配置（推荐）", "按镜头", "按场景"], {
-                    "default": "跟随面板配置（推荐）"}),
+                    "default": "按镜头"}),
                 "使用占位结果": ("BOOLEAN", {"default": False}),
                 "审核阈值": ("INT", {"default": 70, "min": 0, "max": 100,
                                      "tooltip": "整片本地启发式均分阈值"}),
@@ -750,15 +837,33 @@ class BetterComfyUIOneStop:
                 "api_key": ("STRING", {"default": ""}),
                 "model": ("STRING", {"default": ""}),
                 "api_base": ("STRING", {"default": ""}),
-                "统一风格": ("STRING", {"multiline": True, "default": ""}),
+                "统一风格": ("STRING", {"multiline": True, "default": "电影感，真实自然，冷蓝电影光，低饱和，音画同步"}),
                 "出片": ("BOOLEAN", {"default": True}),
             },
         }
 
     # ==================================================================
     def run(self, **kwargs):
-        """公开入口：无多段剧本 → 原单段流程；有多段剧本 → 顺序逐章自动生成并合成总片。"""
+        """公开入口：多段剧本列表JSON/多段剧本 → 顺序逐章生成；否则单段流程。"""
         multi = str(kwargs.get("多段剧本") or "").strip()
+        raw_list = str(kwargs.get("多段剧本列表JSON") or "").strip()
+        chapters_override: list[str] = []
+        _json_parse_error = False
+        if raw_list:
+            try:
+                parsed = json.loads(raw_list)
+                if isinstance(parsed, list):
+                    chapters_override = [str(x).strip() for x in parsed if str(x).strip()]
+            except Exception:  # noqa: BLE001 - 非法 JSON 退回文本切分/单段
+                _json_parse_error = True
+                chapters_override = []
+        if raw_list and not chapters_override and not _json_parse_error:
+            raise RuntimeError(
+                "多段剧本已启用但没有有效内容：请至少在一段里填写剧本，或关闭「多段剧本」。"
+                "（不会静默改用默认示例剧本运行）")
+        if chapters_override:
+            kwargs["_chapters_override"] = chapters_override
+            return self._run_multi_script(kwargs)
         if not multi:
             return self._run_single(**kwargs)
         return self._run_multi_script(kwargs)
@@ -820,6 +925,7 @@ class BetterComfyUIOneStop:
         显存档位: str = "自动",
         剪枝模型: bool = True,
         tiled采样: int = 0,
+        tiled重叠像素: int = 64,
         显存清理_段间: bool = True,
         显存清理_二采前: bool = False,
         显存清理_修脸前: bool = False,
@@ -846,11 +952,17 @@ class BetterComfyUIOneStop:
         走Finalize剪辑: bool = True,
         剪辑CRF: int = 18,
         转场: str = "无",
+        字幕台词: str = "",
         字幕: str = "无",
         水印: str = "无",
         水印文字: str = "剧核 DramaCore",
         封面帧: str = "无",
         输出格式: str = "mp4（H.264）",
+        片头片尾: str = "无",
+        片头文字: str = "",
+        片尾文字: str = "",
+        片尾演职员: str = "",
+        转场时长_秒: float = 0.5,
         系统提示词选择: str = "跟随面板配置（推荐）",
         自定义系统提示词: str = "",
         输出语言: str = "跟随面板配置（推荐）",
@@ -872,6 +984,7 @@ class BetterComfyUIOneStop:
         出片: bool = True,
         多段剧本: str = "",
         多段剧本分隔符: str = "---",
+        多段剧本列表JSON: str = "",
     ):
         from . import director_runtime as dr
 
@@ -883,6 +996,15 @@ class BetterComfyUIOneStop:
         unimplemented: list[str] = []
         _vram_reset()
 
+        # ---- ROUND55：tiled 采样接线（0 默认=旧行为；>1 真正分块）----
+        from . import director_runtime as _dr_r55
+
+        _tiled_info = _dr_r55.normalize_tiled_sampling(
+            int(tiled采样), int(tiled重叠像素))
+        audit.append(str(_tiled_info.get("report") or "tiled 采样：关闭（默认）"))
+        for _w in (_tiled_info.get("warnings") or []):
+            warnings.append(str(_w))
+
         # ---- SG6 选项（v0.4：转场/字幕/水印/封面/格式已实现，见 director_edit）----
         from . import director_edit as de
         from . import director_longform as lf
@@ -890,7 +1012,12 @@ class BetterComfyUIOneStop:
         _fmt = de.resolve_format(str(输出格式))
         _edit_options = {
             "format_label": str(输出格式), "crf": int(剪辑CRF),
-            "transition_label": str(转场), "subtitle_label": str(字幕),
+            "transition_label": str(转场), "transition_seconds": float(转场时长_秒),
+            # 硬字幕由节点后处理用"程序台词时间轴"烧录；这里传"无"避免 finish_movie
+            # 再用各段提示词生成 SRT 烧第二遍（双字幕/重叠是 P0 级问题）
+            "subtitle_label": ("无" if "硬字幕" in str(字幕) else str(字幕)),
+            "intro_outro_mode": str(片头片尾), "intro_text": str(片头文字),
+            "outro_text": str(片尾文字), "outro_credits": str(片尾演职员),
             "watermark_label": str(水印), "cover_label": str(封面帧),
             "watermark_text": str(水印文字 or "剧核 DramaCore"),
             "fade_seconds": de.DEFAULT_FADE_SECONDS,
@@ -900,11 +1027,6 @@ class BetterComfyUIOneStop:
         audit.append(
             "SG6 剪辑配置：格式={} CRF={} 转场={} 字幕={} 水印={} 封面={}".format(
                 _fmt, int(剪辑CRF), 转场, 字幕, 水印, 封面帧))
-        if tiled采样 and int(tiled采样) > 1:
-            unimplemented.append(f"tiled采样 {tiled采样} 块（vendor 执行器自建 sampler，运行时未接线）")
-            warnings.append(
-                f"⚠️ tiled采样={tiled采样}：vendor 执行器内部自建 sampler 对象，当前版本无法在不改 "
-                "vendor 源码的前提下注入 → 已记录为未接线（不冒充生效）")
 
         # ---- 素材审核阈值：-1=跟随配置；记录实际生效值（不假接）----
         try:
@@ -931,7 +1053,7 @@ class BetterComfyUIOneStop:
         # 面板默认系统提示词/输出语言/分镜粒度 → 真实传进总控台（P0-2）
         from bettercomfyui.config import load_config
 
-        from .everything_node import SYSTEM_PROMPT_CHOICES
+        from .everything_node import is_system_prompt_preset, system_prompt_label
 
         try:
             _cfg = load_config(repo_root=self._repo_root())
@@ -944,10 +1066,16 @@ class BetterComfyUIOneStop:
             self._cfg = None
             warnings.append(f"读取面板默认提示词配置失败（已用内置默认）：{type(exc).__name__}: {exc}")
         if str(系统提示词选择).startswith("跟随"):
-            _sys_label = next(
-                (label for label, key in SYSTEM_PROMPT_CHOICES.items() if key == _panel_key),
-                next(iter(SYSTEM_PROMPT_CHOICES)))
-            _custom_prompt = "" if _panel_key in SYSTEM_PROMPT_CHOICES.values() else _panel_key
+            # 面板空 / 面板存的是未知值 → 默认走列表第一项：
+            # ROUND58 起是「H3 提示词精简版（2026-10）」；旧标签也认（ROUND56 工作流兼容）。
+            _sys_label = system_prompt_label(_panel_key)
+            _custom_prompt = "" if is_system_prompt_preset(_panel_key) else _panel_key
+            if not str(_panel_key or "").strip():
+                audit.append(
+                    "提示词配置：面板未保存默认系统提示词 → 本次按 ROUND58 默认加载"
+                    "《H3 提示词工程精简版》V1.0（2026-10，12,890 字）")
+            elif _custom_prompt:
+                audit.append("提示词配置：面板保存的是一整段自定义系统提示词（按自定义原文使用）")
         else:
             _sys_label = str(系统提示词选择)
             _custom_prompt = str(自定义系统提示词 or "")
@@ -1300,6 +1428,14 @@ class BetterComfyUIOneStop:
             "自动返工": bool(自动返工), "CNT2上限": int(CNT2上限),
             "级联返工": bool(级联返工), "CNT3上限": int(CNT3上限),
             "段阈值覆盖": float(段阈值覆盖), "边界相似度阈值": float(边界相似度阈值),
+            # ROUND56：供批次指纹/多段指纹使用
+            "转场": str(转场), "转场时长_秒": float(转场时长_秒),
+            "字幕": str(字幕), "字幕台词": str(字幕台词 or ""),
+            "片头片尾": str(片头片尾), "片头文字": str(片头文字 or ""),
+            "片尾文字": str(片尾文字 or ""), "片尾演职员": str(片尾演职员 or ""),
+            "系统提示词选择": str(系统提示词选择),
+            "tiled_n_tiles": int(_tiled_info.get("n_tiles") or 0),
+            "tiled_overlap_pixels": int(_tiled_info.get("overlap_pixels") or 64),
         }
         t0 = time.time()
         gen = self._generate_batches(ctx)
@@ -1379,6 +1515,46 @@ class BetterComfyUIOneStop:
             else "真实提示词模式（API 或本地提示词模型）",
             "unverified": list(warnings)[:50],
         }
+        # ---- ROUND55：转场决策（AI自动=规则引擎按剧情/连续性/场景切换逐接缝决定）----
+        _transition_decision: dict = {}
+        if str(转场).startswith("AI自动"):
+            try:
+                from bettercomfyui.pipeline import transition_planner as _tp
+
+                _seg_durs: list[float] = []
+                for _f in seg_files:
+                    try:
+                        _seg_durs.append(float(_parse_media(Path(str(_f))).get("duration_s") or 0.0))
+                    except Exception:  # noqa: BLE001
+                        _seg_durs.append(float(每段时长_秒))
+                _seg_infos = []
+                for _i, _p in enumerate(prompts):
+                    _seg_infos.append({
+                        "index": _i, "prompt": str(_p),
+                        "duration_s": (_seg_durs[_i] if _i < len(_seg_durs)
+                                       else float(每段时长_秒)),
+                        "pin_continuous": bool(_i > 0 and 段间连续 and 每段引用上段),
+                        "chapter_boundary": False,
+                    })
+                _transition_decision = _tp.decide_transitions(_seg_infos, auto=True)
+                _plan = _tp.plan_from_decision(_transition_decision)
+                _audit_lines = _tp.audit_lines(_transition_decision)
+                audit.extend(_audit_lines)
+                _edit_options["transition_plan"] = _plan
+                _edit_options["transition_label"] = "无"
+                _edit_options["transition_decision"] = _transition_decision
+                _n_cut = int(_transition_decision.get("cut_count") or 0)
+                _n_tr = sum(1 for _c in (_transition_decision.get("cuts") or [])
+                            if str(_c.get("transition") or "无") != "无")
+                audit.append(
+                    f"AI 转场决策：{_n_cut} 处接缝 → {_n_tr} 处转场 / "
+                    f"{_n_cut - _n_tr} 处硬切（规则可解释，非模型幻觉；审计逐条见上）")
+            except Exception as exc:  # noqa: BLE001 - 决策失败回退到统一标签/硬切
+                warnings.append(f"⚠️ AI 转场决策失败（回退固定转场）：{type(exc).__name__}: {exc}")
+                _edit_options["transition_label"] = "无"
+        else:
+            _edit_options["transition_label"] = str(转场)
+
         t0 = time.time()
         try:
             edit = de.finish_movie(
@@ -1408,6 +1584,107 @@ class BetterComfyUIOneStop:
             shutil.copy2(fb, final_path)
             finalize_report = {"executed": False, "error": f"{type(exc).__name__}: {exc}",
                                "fallback": "splice_segments+copy"}
+
+        # ---- ROUND55：硬字幕（程序对齐，非模型/ASR）→ 片头片尾卡拼接 ----
+        _post = project_dir / "_work" / f"round55_post_{int(time.time())}"
+        _round55_prepend_durs: list[float] = []
+        _round55_append_durs: list[float] = []
+        try:
+            if "硬字幕" in str(字幕):
+                from bettercomfyui.pipeline import hard_subtitles as hs
+
+                _post.mkdir(parents=True, exist_ok=True)
+                _dur_hint = float(_parse_media(final_path).get("duration_s") or 0.0)
+                _hs_out = _post / f"hardsub{Path(final_path).suffix or '.mp4'}"
+                _raw_lines = [ln.strip() for ln in str(字幕台词 or "").splitlines() if ln.strip()]
+                if _raw_lines:
+                    _entries = _raw_lines
+                    audit.append(f"硬字幕文本来源：字幕台词（{len(_entries)} 行，非模型/ASR）")
+                else:
+                    _script_lines = _extract_dialogue_lines(str(剧本 or ""))
+                    if _script_lines:
+                        _entries = _script_lines
+                        audit.append(
+                            f"硬字幕文本来源：剧本引号台词自动提取（{len(_entries)} 行，程序规则，"
+                            "非模型/ASR；如需精修可在「字幕台词」里覆盖）")
+                    else:
+                        _entries = []
+                        warnings.append(
+                            "⚠️ 未填「字幕台词」且剧本没有引号台词 → 跳过硬字幕"
+                            "（不会用视频提示词冒充字幕；请在「字幕台词」或剧本引号里写台词）")
+                _burned = None
+                if _entries:
+                    _burned = hs.burn_hard_subtitles(
+                        final_path, _entries, _hs_out, fps=float(帧率),
+                        total_duration_s=_dur_hint or None, warnings=warnings)
+                else:
+                    audit.append("硬字幕：跳过（无有效字幕文本，保留无字幕成片）")
+                if _burned is not None and Path(_burned).is_file():
+                    import shutil as _sh
+
+                    _sh.copy2(_burned, final_path)
+                    audit.append(
+                        f"硬字幕（程序对齐）：{len(_entries)} 段台词 → 已烧录"
+                        f"（时间轴由程序按帧网格生成，非模型/ASR）")
+                    finalize_report.setdefault("round55", {})["hard_subtitles"] = {
+                        "mode": "程序对齐", "segments": len(_entries),
+                        "file": str(_burned)}
+                else:
+                    warnings.append("⚠️ 硬字幕烧录未产出文件，保留无字幕成片（如实记录）")
+        except Exception as exc:  # noqa: BLE001 - 字幕失败不冒充成功
+            warnings.append(f"⚠️ 硬字幕烧录失败（保留无字幕成片）：{type(exc).__name__}: {exc}")
+
+        try:
+            if str(片头片尾) and not str(片头片尾).startswith("无"):
+                from bettercomfyui.pipeline import intro_outro as io
+
+                _post.mkdir(parents=True, exist_ok=True)
+                _io = io.generate_intro_outro(
+                    _post, mode=str(片头片尾), fmt_label=str(输出格式),
+                    width=int(宽度), height=int(高度), fps=float(帧率),
+                    title=str(片头文字 or ""), subtitle=str(片头文字 or ""),
+                    outro_title=str(片尾文字 or ""), credits=str(片尾演职员 or ""),
+                    watermark_text=(str(水印文字) if str(水印).startswith("文字") else ""),
+                    warnings=warnings)
+                for _line in (_io.get("audit") or []):
+                    audit.append(f"片头片尾：{_line}")
+                _clips: list[Path] = []
+                if _io.get("intro"):
+                    _clips.append(Path(_io["intro"]))
+                    try:
+                        _round55_prepend_durs.append(float(
+                            _parse_media(Path(_io["intro"])).get("duration_s") or 0.0))
+                    except Exception:  # noqa: BLE001
+                        pass
+                _clips.append(Path(final_path))
+                if _io.get("outro"):
+                    _clips.append(Path(_io["outro"]))
+                    try:
+                        _round55_append_durs.append(float(
+                            _parse_media(Path(_io["outro"])).get("duration_s") or 0.0))
+                    except Exception:  # noqa: BLE001
+                        pass
+                if len(_clips) > 1:
+                    _comb = de.splice_segments(
+                        _clips, workdir=_post / "combine", transition="无",
+                        warnings=warnings, audit=audit)
+                    if _comb is not None and Path(_comb).is_file():
+                        import shutil as _sh
+
+                        _sh.copy2(_comb, final_path)
+                        audit.append(f"片头片尾：已拼接到成片首尾（{len(_clips)} 段 → {final_path}）")
+                        finalize_report.setdefault("round55", {})["intro_outro"] = {
+                            "mode": str(片头片尾),
+                            "intro": str(_io.get("intro") or ""),
+                            "outro": str(_io.get("outro") or ""),
+                            "combined": str(_comb)}
+                    else:
+                        warnings.append("⚠️ 片头片尾拼接无输出，保留原成片（如实记录）")
+                else:
+                    warnings.append("⚠️ 片头片尾未生成任何卡片，保留原成片（如实记录）")
+        except Exception as exc:  # noqa: BLE001 - 片头片尾失败不冒充成功
+            warnings.append(f"⚠️ 片头片尾生成/拼接失败（保留原成片）：{type(exc).__name__}: {exc}")
+
         meta = _parse_media(final_path)
         vram_after_encode = _vram_peak()
         self._stage_checkpoint(project_dir, "encode", {
@@ -1432,6 +1709,15 @@ class BetterComfyUIOneStop:
                                            or len(seg_files) or 1))
         actual_segments = len(seg_files) if seg_files else 1
         _seg_dur_json = self._seg_durations_json(seg_files) if seg_files else ""
+        if (_round55_prepend_durs or _round55_append_durs) and _seg_dur_json:
+            try:
+                _seg_list = json.loads(_seg_dur_json)
+                _seg_list = ([d for d in _round55_prepend_durs if d > 0.05] + list(_seg_list)
+                             + [d for d in _round55_append_durs if d > 0.05])
+                _seg_dur_json = json.dumps([round(float(d), 3) for d in _seg_list])
+                audit.append(f"审核段时长列表已含片头/片尾（{len(_seg_list)} 段，与成片边界对齐）")
+            except Exception as exc:  # noqa: BLE001
+                warnings.append(f"⚠️ 片头片尾时长并入审核段列表失败（按正片段审核）：{exc}")
         integrity, quality = self._review(
             final_path, meta, expected_s=generated_seconds,
             threshold=int(审核阈值), audit=audit,
@@ -1448,7 +1734,7 @@ class BetterComfyUIOneStop:
             project_id=project_id,
             本次是级联重做=bool(rework.get("cnt3") and any(rework["cnt3"])),
             段时长列表JSON=_seg_dur_json,
-            不计入项目CNT=True,
+            不计入项目CNT=False,
         )
         # ROUND49：返工/CNT2/CNT3/兜底 结构化给 UI（与整片审核同一对象）
         video_review["rework_rounds"] = list(rework.get("rounds") or [])
@@ -1537,6 +1823,12 @@ class BetterComfyUIOneStop:
             "integrity": integrity,
             "quality": quality,
             "video_review": video_review,
+            "transition_decision": _transition_decision,
+            "transition_mode": str(转场),
+            "video_prompts": list(prompts),
+            "video_prompt_count": len(prompts),
+            "subtitle_mode": str(字幕),
+            "system_prompt_choice": str(系统提示词选择),
             # ROUND49：UI 汇总卡（素材审核分数/状态 + 视频分段审核 + 返工 + 结论）
             "review_summary": {
                 "assets": asset_report.get("review_summary") or {},
@@ -1584,7 +1876,12 @@ class BetterComfyUIOneStop:
                 "batch_size": int(每批段数),
                 "vram_tier": str(显存档位),
                 "pruned_model": bool(剪枝模型),
-                "tiled_sampling": int(tiled采样),
+                "tiled_sampling": {
+                    "enabled": bool(_tiled_info.get("enabled")),
+                    "n_tiles": int(_tiled_info.get("n_tiles") or 0),
+                    "overlap_pixels": int(_tiled_info.get("overlap_pixels") or 64),
+                    "warnings": list(_tiled_info.get("warnings") or []),
+                },
             },
             "auto_rework": rework,
             "edit": {k: v for k, v in finalize_report.items() if k != "audit"},
@@ -1705,6 +2002,9 @@ class BetterComfyUIOneStop:
             clear_vram_between_segments=bool(ctx["显存清理_段间"]),
             clear_vram_before_refine=bool(ctx["显存清理_二采前"]),
             clear_vram_before_face_refine=bool(ctx["显存清理_修脸前"]),
+            **dr.tiled_sampling_kwargs(
+                int(ctx.get("tiled_n_tiles") or 0),
+                int(ctx.get("tiled_overlap_pixels") or 64)),
             cache_frames_codec=str(ctx["缓存编码"]),
             export_source_images=bool(ctx["导出原始帧"]),
             export_pre_face_refine=bool(ctx["输出修脸前"]),
@@ -1731,6 +2031,19 @@ class BetterComfyUIOneStop:
             elif tier.startswith("高"):
                 size = max(size, 16)
             plan = lf.plan_batches(total, size)
+        # ROUND55：跨批连续性计划（尾帧参考近似；不是原生 22 帧 pin）
+        try:
+            from bettercomfyui.pipeline import batch_continuity as bc
+
+            ctx["batch_continuity_plan"] = bc.plan_batch_continuity(
+                plan, enabled=bool(ctx.get("段间连续")) and str(ctx.get("task_key")) == "r2v")
+            ctx["cross_batch_overlap_frames"] = bc.suggest_overlap_frames(
+                fps=fps, overlap_ms=500)
+            audit.extend(ctx["batch_continuity_plan"].get("audit") or [])
+            ctx.setdefault("cross_batch_refs", None)
+        except Exception as exc:  # noqa: BLE001 - 计划失败不阻断出片
+            ctx["batch_continuity_plan"] = None
+            warnings.append(f"⚠️ 跨批连续性计划失败（退回单帧尾帧近似）：{type(exc).__name__}: {exc}")
         fingerprint = lf.parameter_fingerprint({
             "prompts": [s.get("prompt") for s in specs],
             "timeline_json": str(ctx.get("时间轴JSON") or ""),
@@ -1752,6 +2065,14 @@ class BetterComfyUIOneStop:
             "vae": ctx["视频VAE"], "avae": ctx["音频VAE"], "lora": ctx["视频LoRA"],
             "continuity": [ctx["段间连续"], ctx["连续帧数"], ctx["连续模式"]],
             "batch_size": ctx["每批段数"], "task": ctx["task_type"],
+            # ROUND56 审计：这些参数变化必须让旧批次缓存失效
+            "r56_transition": [str(ctx.get("转场") or ""), str(ctx.get("转场时长_秒") or "")],
+            "r56_subtitle": [str(ctx.get("字幕") or ""), str(ctx.get("字幕台词") or "")],
+            "r56_intro_outro": [str(ctx.get("片头片尾") or ""), str(ctx.get("片头文字") or ""),
+                                str(ctx.get("片尾文字") or ""), str(ctx.get("片尾演职员") or "")],
+            "r56_prompt": [str(ctx.get("系统提示词选择") or ""), str(ctx.get("输出语言") or ""),
+                           str(ctx.get("分镜粒度") or "")],
+            "r56_tiled": [ctx.get("tiled_n_tiles"), ctx.get("tiled_overlap_pixels")],
         })
         state = {"batches": {}}
         if ctx["断点续跑"]:
@@ -1771,9 +2092,24 @@ class BetterComfyUIOneStop:
             if reuse:
                 seg_files[start:end] = reuse
                 audit.append(f"批次{bi + 1}/{len(plan)}：检查点命中，跳过段{start + 1}-{end}")
+                if end < total and str(ctx.get("task_key")) == "r2v":
+                    try:
+                        from bettercomfyui.pipeline import batch_continuity as bc
+
+                        info = bc.build_cross_batch_refs(
+                            [str(f) for f in reuse],
+                            ctx["seg_dir"] / f"tailrefs_b{bi + 1}", max_refs=3,
+                            warnings=warnings)
+                        ctx["cross_batch_refs"] = info
+                        ctx["tail_ref"] = str(info["refs"][-1]) if info.get("refs") else ""
+                        audit.extend(info.get("audit") or [])
+                    except Exception as exc:  # noqa: BLE001
+                        warnings.append(f"⚠️ 复用批跨批尾帧参考失败（继续）：{type(exc).__name__}: {exc}")
                 ctx["batch_rows"].append({"batch_index": bi, "segments": [start + 1, end],
                                           "status": "reused", "reused": True,
-                                          "seg_files": reuse})
+                                          "seg_files": reuse,
+                                          "cross_batch_approx": end < total,
+                                          "native_pin": False})
                 continue
             t0 = time.time()
             if ctx.get("models") is None:
@@ -1788,16 +2124,23 @@ class BetterComfyUIOneStop:
                 s.setdefault("frames", int(round(float(ctx["每段时长_秒"]) * fps)))
                 if j == 0 and gi > 0:
                     s["continuityFromPrev"] = False
-                    tail = ctx.get("tail_ref")
-                    if ctx["task_key"] == "r2v" and tail:
-                        from . import director_runtime as dr
+                    from . import director_runtime as dr
 
-                        refs = list(s.get("refs") or [])
-                        refs.append(dr.image_ref(tail, index=len(refs)))
-                        s["refs"] = refs
+                    _prev_refs = list(s.get("refs") or [])
+                    _extra = list((ctx.get("cross_batch_refs") or {}).get("refs") or [])
+                    if not _extra and ctx.get("tail_ref"):
+                        _extra = [ctx["tail_ref"]]
+                    for _ref in _extra:
+                        _prev_refs.append(dr.image_ref(str(_ref), index=len(_prev_refs)))
+                    if _extra:
+                        s["refs"] = _prev_refs
+                        s["cross_batch_continuity_mode"] = "batch_tail_ref_approx"
+                        s["cross_batch_refs_count"] = len(_extra)
+                        s["native_pin"] = False
                         warnings.append(
-                            f"⚠️ 跨批衔接：批次{bi + 1}首段用上一批尾帧作额外参考图"
-                            "（近似，非 vendor 原生 22 帧 pin；跨批连续如实标注）")
+                            f"⚠️ 跨批衔接：批次{bi + 1}首段挂上一批尾帧参考 {len(_extra)} 张"
+                            "（尾帧参考近似 method=tail_frames_approx，非 vendor 原生 22 帧 pin；"
+                            "跨批连续如实标注）")
             if user_tl:
                 # 用户完整时间轴覆盖：单次执行，段数取时间轴 segmentCount（不做分批）
                 from . import director_runtime as dr
@@ -1838,17 +2181,36 @@ class BetterComfyUIOneStop:
                 out = ctx["seg_dir"] / f"seg_{start + k + 1:03d}.mp4"
                 _encode_movie(segs[k], item_audio, out, fps)
                 seg_files[start + k] = str(out)
-            if end < total and ctx["task_key"] == "r2v":
+            if end < total and str(ctx.get("task_key")) == "r2v":
                 try:
-                    ctx["tail_ref"] = str(lf.extract_last_frame(
-                        Path(seg_files[end - 1]), ctx["seg_dir"] / f"tail_b{bi + 1}.png"))
+                    from bettercomfyui.pipeline import batch_continuity as bc
+
+                    info = bc.build_cross_batch_refs(
+                        [str(seg_files[i]) for i in range(start, end)],
+                        ctx["seg_dir"] / f"tailrefs_b{bi + 1}", max_refs=3,
+                        warnings=warnings)
+                    ctx["cross_batch_refs"] = info
+                    ctx["tail_ref"] = str(info["refs"][-1]) if info.get("refs") else ""
+                    audit.extend(info.get("audit") or [])
                 except Exception as exc:  # noqa: BLE001 - 跨批尾帧失败要可见
-                    warnings.append(f"⚠️ 跨批尾帧提取失败（下一批少一张近似衔接参考图）：{exc}")
+                    warnings.append(f"⚠️ 跨批尾帧提取失败（下一批少近似衔接参考图）："
+                                    f"{type(exc).__name__}: {exc}")
+            _bc_row = {}
+            try:
+                _bc_row = (ctx.get("batch_continuity_plan") or {}).get("batches", [])[bi] or {}
+            except Exception:  # noqa: BLE001
+                _bc_row = {}
             state["batches"][str(bi)] = {
                 "status": "done", "reused": False,
                 "seg_files": [str(seg_files[i]) for i in range(start, end)],
                 "elapsed_s": round(time.time() - t0, 2),
                 "report_first_line": str(rep).splitlines()[0] if rep else "",
+                "continuity_mode": _bc_row.get("continuity_mode", "native_or_none"),
+                "native_pin": False if end < total else True,
+                "cross_batch_approx": bool(_bc_row.get("cross_batch_approx", False)),
+                "tail_refs": len((ctx.get("cross_batch_refs") or {}).get("refs") or [])
+                             if end < total else 0,
+                "overlap_frames_suggested": ctx.get("cross_batch_overlap_frames", 0),
             }
             if ctx["断点续跑"]:
                 lf.save_checkpoint(ctx["project_dir"], fingerprint, state)
@@ -1974,8 +2336,15 @@ class BetterComfyUIOneStop:
         from . import director_edit as de
 
         started = time.time()
-        chapters = self._split_multi_script(str(kwargs.get("多段剧本") or ""),
-                                           str(kwargs.get("多段剧本分隔符") or "---"))
+        _requested_chapters = len(kwargs.get("_chapters_override") or [])
+        chapters = list(kwargs.pop("_chapters_override", []) or [])
+        if not chapters:
+            chapters = self._split_multi_script(str(kwargs.get("多段剧本") or ""),
+                                               str(kwargs.get("多段剧本分隔符") or "---"))
+            _requested_chapters = len(chapters)
+        _truncated = len(chapters) > 64
+        if _truncated:
+            chapters = chapters[:64]
         if len(chapters) <= 1:
             sub = dict(kwargs)
             sub["剧本"] = str(kwargs.get("多段剧本") or kwargs.get("剧本") or "")
@@ -1991,6 +2360,19 @@ class BetterComfyUIOneStop:
             "height": kwargs.get("高度"), "task": kwargs.get("任务类型"),
             "continuity": [kwargs.get("段间连续"), kwargs.get("连续帧数")],
             "steps": kwargs.get("步数"), "seed": kwargs.get("seed"),
+            # ROUND56 审计：改字幕/转场/水印/提示词/显存策略后必须失效旧缓存
+            "transition": [kwargs.get("转场"), kwargs.get("转场时长_秒")],
+            "subtitle": [kwargs.get("字幕"), kwargs.get("字幕台词")],
+            "watermark": [kwargs.get("水印"), kwargs.get("水印文字")],
+            "intro_outro": [kwargs.get("片头片尾"), kwargs.get("片头文字"),
+                            kwargs.get("片尾文字"), kwargs.get("片尾演职员")],
+            "prompt": [kwargs.get("系统提示词选择"), kwargs.get("自定义系统提示词"),
+                       kwargs.get("输出语言"), kwargs.get("分镜粒度")],
+            "vram": [kwargs.get("显存档位"), kwargs.get("剪枝模型"),
+                     kwargs.get("批次间卸载模型")],
+            "batch_size": kwargs.get("每批段数"),
+            "rework": [kwargs.get("自动返工"), kwargs.get("CNT2上限"),
+                       kwargs.get("级联返工"), kwargs.get("CNT3上限")],
         }, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:20]
         ck_dir = Path(tempfile.gettempdir()) / "dramacore_multi"
         ck_path = ck_dir / f"{fingerprint}.json"
@@ -2013,6 +2395,12 @@ class BetterComfyUIOneStop:
         chapter_meta: list[dict] = []
         audits: list[str] = []
         warnings: list[str] = []
+        if _truncated or _requested_chapters > 64:
+            warnings.append(
+                f"⚠️ 多段剧本共 {_requested_chapters} 段，超过上限 64 → 仅生成前 64 段"
+                "（其余请拆分多次运行）")
+        _multi_sub_lines = [ln.strip() for ln in str(kwargs.get("字幕台词") or "").splitlines()
+                            if ln.strip()]
         prompt_jsons: list[str] = []
         last_result = None
         total_api = 0
@@ -2035,6 +2423,13 @@ class BetterComfyUIOneStop:
             sub["剧本"] = chapter
             sub["多段剧本"] = ""
             sub["输出文件名"] = f"{stem}_第{idx:02d}章{suffix}"
+            # 全局字幕台词按章切分（避免每章重复整份字幕）；无全局台词则每章自动提取本段对白
+            if _multi_sub_lines:
+                _n_ch = max(1, len(chapters))
+                _size = max(1, (len(_multi_sub_lines) + _n_ch - 1) // _n_ch)
+                sub["字幕台词"] = "\n".join(_multi_sub_lines[(idx - 1) * _size: idx * _size])
+            else:
+                sub["字幕台词"] = ""
             try:
                 result = self._run_single(**sub)
             except Exception as exc:  # noqa: BLE001 - 记录失败章继续，最终标记不完整
@@ -2569,6 +2964,13 @@ class BetterComfyUIOneStop:
                            "\"operator\": \"...\", \"reason\": \"...\"}；文件用后即归档",
             "timeout_minutes": timeout_min,
         }, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 清理上次残留的 .used 归档（避免混淆；decision 由 nonce 校验）
+        try:
+            for _old in review_dir.glob("asset_decision_*.used.json"):
+                if _old.stat().st_mtime < time.time() - 7 * 86400:
+                    _old.unlink(missing_ok=True)
+        except Exception:  # noqa: BLE001 - 清理失败不影响主流程
+            pass
         audit.append(f"人工审核：等待审批文件 {pending}（nonce={nonce}；超时 {timeout_min} 分钟→切模型）")
         deadline = time.time() + max(0.0, timeout_min) * 60.0
         while time.time() < deadline:
@@ -2594,9 +2996,17 @@ class BetterComfyUIOneStop:
                         verdict = "通过" if data["approved"] else "拒绝"
                         audit.append(f"人工审核：{verdict}（operator={data.get('operator') or '未署名'}；"
                                      f"reason={data.get('reason') or '无'}；nonce={nonce}；文件已归档）")
+                        try:
+                            pending.replace(pending.with_suffix(".done.json"))
+                        except Exception:  # noqa: BLE001
+                            pass
                         return {"approved": bool(data["approved"])}
             time.sleep(interval)
         audit.append(f"人工审核超时（{timeout_min} 分钟无有效结论）→ 自动切模型审核（CNT1 从 0）")
+        try:
+            pending.replace(pending.with_suffix(".timeout.json"))
+        except Exception:  # noqa: BLE001
+            pass
         return {"approved": False, "forced_model": True}
 
     def _generate_and_review_assets(

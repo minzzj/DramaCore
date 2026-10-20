@@ -118,14 +118,14 @@
 
 ```powershell
 # 1) 本地打包（沿用 ROUND36/ROUND42 的源码包流程）
-cd 'H:\minzzj文件\技术部\项目\官方\Better comfyUI'
+cd '[PROJECT-ROOT]'
 python -B scripts/prepare_remote_bundle.py
-scp -P 8188 dist\bettercomfyui_bundle_*.zip root@your-gpu-host:/data/
+scp -P 8188 dist\bettercomfyui_bundle_*.zip user@your-gpu-host:/data/
 ```
 
 ```bash
 # 2) 远端：只替换插件源码（含 web/js 新文件），不碰模型/工作流/用户配置
-ssh -p 8188 root@your-gpu-host
+ssh -p PORT user@your-gpu-host
 cd /data && unzip -o bettercomfyui_bundle_*.zip -d BetterComfyUI
 cp -a /model/ComfyUI/custom_nodes/bettercomfyui_comfy/web/js/dramacore_director_ui.js \
       /model/ComfyUI/custom_nodes/bettercomfyui_comfy/web/js/

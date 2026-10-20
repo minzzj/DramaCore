@@ -217,12 +217,15 @@ def save_user_settings(updates: dict) -> dict:
     # `ComfyUI-Storyboard-LLM` 没有 api_key 输入端口，它只读自己目录下的
     # settings.json（api_key / base_url / output_path）。
     prompt_now = existing.get("prompt") or {}
+    # ROUND58 安全修复：**不再把 API Key 同步到 ComfyUI 原生设置 / 剧本巨人 settings.json**。
+    # 那些文件可被无鉴权的 `/settings`、`/storyboard/settings` 读取，等于密钥明文外露。
+    # 这里只同步 base_url，并主动清除旧版本可能已经写进去的 api_key。
     giant = sync_giant_settings(
-        api_key=str(prompt_now.get("api_key") or ""),
+        api_key="",
         base_url=str(prompt_now.get("endpoint") or ""),
     )
     native = _sync_native_comfy_setting(
-        api_key=str(prompt_now.get("api_key") or ""),
+        api_key="",
         base_url=str(prompt_now.get("endpoint") or ""),
     )
     return {"ok": True, "written": written,
@@ -231,13 +234,11 @@ def save_user_settings(updates: dict) -> dict:
 
 
 def _sync_native_comfy_setting(*, api_key: str, base_url: str) -> dict:
-    r"""把密钥同步到 ComfyUI **原生设置**（`StoryBoard.api_key`）。
+    r"""ROUND58 安全修复：只同步 base_url，**绝不写 api_key** 到 ComfyUI 原生设置。
 
-    这样用户在原生「设置」里看到的就是已填好的值，
-    而且巨人的 web 扩展读的也是这里 —— 两处不会互相打架。
+    ComfyUI 原生 `/settings` 无鉴权，写 `StoryBoard.api_key` 等于把密钥明文暴露给
+    同进程/同网段任何能访问服务的人；这里会主动删除旧版本写入的 key 字段。
     """
-    if not api_key:
-        return {"ok": False, "reason": "无密钥可同步"}
     try:
         data: dict = {}
         if COMFY_SETTINGS_FILE.is_file():
@@ -247,13 +248,18 @@ def _sync_native_comfy_setting(*, api_key: str, base_url: str) -> dict:
                 return {"ok": False, "reason": "comfy.settings.json 解析失败，未覆盖"}
             if not isinstance(data, dict):
                 return {"ok": False, "reason": "comfy.settings.json 顶层不是字典"}
-        data["StoryBoard.api_key"] = api_key
+        scrubbed = False
+        for key in ("StoryBoard.api_key", "storyboard.api_key"):
+            if key in data:
+                data.pop(key, None)
+                scrubbed = True
         if base_url:
             data["StoryBoard.base_url"] = base_url
         COMFY_SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
         COMFY_SETTINGS_FILE.write_text(
             json.dumps(data, ensure_ascii=False, indent=4), encoding="utf-8")
-        return {"ok": True, "path": str(COMFY_SETTINGS_FILE)}
+        return {"ok": True, "path": str(COMFY_SETTINGS_FILE),
+                "scrubbed_api_key": scrubbed, "note": "安全：不写 API Key"}
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "reason": f"写原生设置失败：{exc}"}
 
@@ -291,22 +297,33 @@ def _read_giant_settings_key() -> str:
 
 
 def sync_giant_settings(*, api_key: str, base_url: str) -> dict:
-    """把 API 配置写进剧本巨人的 `settings.json`（尽力而为，失败不阻断）。"""
+    """ROUND58 安全修复：只同步 base_url，并清除旧版本写入的 api_key。
+
+    剧本巨人的 settings.json 可被无鉴权的 `/storyboard/settings` 读取；写 key 等于明文外露。
+    保留此函数是为了兼容旧调用点（例如其它节点/脚本），但**不再落盘密钥**。
+    """
     giant_dir = REPO_ROOT / ".comfyui" / "custom_nodes" / "ComfyUI-Storyboard-LLM"
     if not giant_dir.is_dir():
         return {"ok": False, "reason": "巨人包未安装（跳过）"}
     target = giant_dir / "settings.json"
-    payload = {
-        "api_key": api_key,
-        "base_url": base_url or "https://api.deepseek.com",
-        "output_path": "",
-    }
+    existing: dict = {}
+    if target.is_file():
+        try:
+            existing = json.loads(target.read_text(encoding="utf-8")) or {}
+        except Exception:  # noqa: BLE001 - 坏文件不覆盖（只尝试写安全字段）
+            existing = {}
+        if not isinstance(existing, dict):
+            existing = {}
+    scrubbed = bool(existing.pop("api_key", None))
+    existing["base_url"] = base_url or "https://api.deepseek.com"
+    existing.setdefault("output_path", "")
     try:
-        target.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        target.write_text(json.dumps(existing, ensure_ascii=False, indent=2) + "\n",
                           encoding="utf-8")
     except Exception as exc:  # noqa: BLE001
         return {"ok": False, "reason": f"写巨人配置失败：{exc}"}
-    return {"ok": True, "path": str(target)}
+    return {"ok": True, "path": str(target), "scrubbed_api_key": scrubbed,
+            "note": "安全：不写 API Key"}
 
 
 def _normalize(body: dict) -> dict:
@@ -339,8 +356,28 @@ async def handle_get(request):  # noqa: ARG001 - aiohttp 签名固定
 
 
 async def handle_save(request):
-    """POST `/bettercomfyui/settings` —— 保存配置到 config/user.yaml。"""
+    """POST `/bettercomfyui/settings` —— 保存配置到 config/user.yaml。
+
+    ROUND58 安全：本机/同源保护（与 routes._panel_sensitive_guard 等价，避免循环导入）；
+    远程使用必须显式 BETTERCOMFYUI_ALLOW_REMOTE_PANEL=1。
+    """
     from aiohttp import web
+    import os as _os
+    from urllib.parse import urlparse as _urlparse
+
+    if str(_os.environ.get("BETTERCOMFYUI_ALLOW_REMOTE_PANEL") or "").lower() not in ("1", "true", "yes"):
+        remote = str(getattr(request, "remote", "") or "").strip().split("%")[0]
+        if remote and remote not in ("127.0.0.1", "::1", "localhost"):
+            return web.json_response(
+                {"ok": False, "error": "为安全起见，/settings 写入只允许本机访问；"
+                                       "远程请用带认证的反向代理或显式 BETTERCOMFYUI_ALLOW_REMOTE_PANEL=1"},
+                status=403, dumps=_dumps)
+        origin = str(request.headers.get("Origin") or request.headers.get("Referer") or "").strip()
+        host = str(request.headers.get("Host") or "").strip()
+        if origin and host and _urlparse(origin).netloc and _urlparse(origin).netloc != host:
+            return web.json_response(
+                {"ok": False, "error": "跨站请求被拒绝（Origin/Host 不一致）"},
+                status=403, dumps=_dumps)
 
     try:
         body = await request.json()
@@ -357,6 +394,11 @@ async def handle_save(request):
     if not normalized["prompt"]:
         return web.json_response(
             {"ok": False, "error": "没有可保存的字段"}, status=400, dumps=_dumps)
+    env_name = str(normalized["prompt"].get("api_key_env") or "").strip()
+    if env_name and env_name not in ("BETTERCOMFYUI_API_KEY", "DEEPSEEK_API_KEY"):
+        return web.json_response(
+            {"ok": False, "error": "api_key_env 只允许 BETTERCOMFYUI_API_KEY / DEEPSEEK_API_KEY"},
+            status=400, dumps=_dumps)
 
     result = save_user_settings(normalized)
     if not result.get("ok"):

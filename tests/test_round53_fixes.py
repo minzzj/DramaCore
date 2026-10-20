@@ -102,7 +102,10 @@ def test_human_review_wait_approves_and_writes_pending(tmp_path):
                                          name="主角", png=None, audit=audit, warnings=warnings)
     th.join()
     assert out == {"approved": True}
-    assert (project_dir / "review" / "asset_pending_a1_v1.json").is_file()
+    # ROUND55 A4 修复：pending 用后归档为 .done.json，decision 消费为 .used.json
+    review_dir = project_dir / "review"
+    assert (review_dir / "asset_pending_a1_v1.done.json").is_file()
+    assert not decision_file.exists()
     assert any("人工审核：通过" in line for line in audit)
 
 

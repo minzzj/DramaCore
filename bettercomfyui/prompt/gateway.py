@@ -225,9 +225,22 @@ def _dig(obj: Any, path: str) -> Any:
 
 
 def _content_to_text(value: Any) -> str:
-    """把 ``message.content`` 之类的字段转成文本（兼容多段 content 数组）。"""
+    """把 ``message.content`` 之类的字段转成文本（兼容多段 content 数组/对象）。
+
+    ROUND58：自配接口的 ``custom_response_path`` 可能指向
+    ``{"content": "..."}`` / ``{"text": "..."}`` 这类对象；旧实现只处理 str/list，
+    其它类型会被 ``str(dict)`` 成 Python repr（单引号），下游 JSON 解析必然失败。
+    这里统一按「文本字段优先」抽取，抽不到返回空串，由调用方给出明确错误。
+    """
     if isinstance(value, str):
         return value
+    if isinstance(value, Mapping):
+        for key in ("content", "text", "message", "value"):
+            if key in value:
+                text = _content_to_text(value[key])
+                if text:
+                    return text
+        return ""
     if isinstance(value, list):
         chunks: list[str] = []
         for item in value:
@@ -237,6 +250,10 @@ def _content_to_text(value: Any) -> str:
                 text = item.get("text")
                 if isinstance(text, str):
                     chunks.append(text)
+                else:
+                    nested = _content_to_text(item)
+                    if nested:
+                        chunks.append(nested)
         return "".join(chunks)
     return ""
 
@@ -392,6 +409,24 @@ class LocalQwenGateway(_BaseHttpGateway):
     provider = "local_qwen"
 
 
+def _coerce_template_node(node: Any) -> Any:
+    """把「JSON 字符串模板」解析成对象，其余模板原样返回。
+
+    ``prompt.custom_request_template`` 在 YAML 里常被写成 dict；但用户也可能写成一整段
+    JSON 字符串。后者若直接走 :func:`_render_template`，JSON 自己的 ``{`` 会被当成
+    格式占位符而报「未知占位符」。这里先尝试 ``json.loads``：能解析就按对象递归渲染，
+    解析失败（例如 ``'{"prompt": "{system}"}'`` 本身是合法 JSON，会成功）才保留原字符串。
+    """
+    if isinstance(node, str):
+        stripped = node.strip()
+        if stripped.startswith(("{", "[")):
+            try:
+                return json.loads(stripped)
+            except (json.JSONDecodeError, ValueError):
+                return node
+    return node
+
+
 class CustomGateway(_BaseHttpGateway):
     """开发者自配接口：自定义请求模板 + 响应取值路径。"""
 
@@ -406,9 +441,11 @@ class CustomGateway(_BaseHttpGateway):
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
-        self.request_template = request_template
+        self.request_template = _coerce_template_node(request_template)
         self.response_path = response_path
-        self.response_template = response_template
+        self.response_template = (
+            _coerce_template_node(response_template) if response_template else None
+        )
 
     def build_payload(self, *, system: str, user: str, params: Mapping[str, Any]) -> Any:
         mapping = {
@@ -416,6 +453,10 @@ class CustomGateway(_BaseHttpGateway):
             "user": user,
             "model": self.model_name,
             "endpoint": self.endpoint,
+            # 自配接口把密钥放在 body（而不是 Header）时可直接引用；
+            # 未配置时给空串，避免模板里出现字符串 "None"。
+            "api_key": self._api_key or "",
+            "max_tokens": self.max_tokens if self.max_tokens is not None else "",
         }
         mapping.update({k: v for k, v in params.items() if k in PARAM_PASSTHROUGH})
         return _render_template(self.request_template, mapping, provider=self.provider)
@@ -425,14 +466,29 @@ class CustomGateway(_BaseHttpGateway):
             value = _dig(response, self.response_path)
         except KeyError as exc:
             raise GatewayError(
-                f"响应中取不到 prompt.custom.response_path={self.response_path!r} 指向的值",
+                f"响应中取不到 prompt.custom_response_path={self.response_path!r} 指向的值；"
+                "请检查该路径（例如 choices.0.message.content / data.text）",
                 error_class=ErrorClass.MODEL_API,
                 provider=self.provider,
                 url=self.url,
             ) from exc
-        text = _content_to_text(value) if isinstance(value, (str, list)) else str(value)
+        text = _content_to_text(value)
+        if not text.strip():
+            raise GatewayError(
+                f"prompt.custom_response_path={self.response_path!r} 指向的值不是可用文本"
+                f"（收到 {type(value).__name__}，内容片段 {str(value)[:200]!r}）；"
+                "请把路径指向实际存放模型文本的字段",
+                error_class=ErrorClass.MODEL_API,
+                provider=self.provider,
+                url=self.url,
+            )
         if self.response_template:
-            return str(_render_template(self.response_template, {"text": text}, provider=self.provider))
+            rendered = _render_template(
+                self.response_template, {"text": text}, provider=self.provider
+            )
+            if isinstance(rendered, str):
+                return rendered
+            return json.dumps(rendered, ensure_ascii=False)
         return text
 
 

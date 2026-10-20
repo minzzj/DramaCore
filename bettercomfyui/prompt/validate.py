@@ -50,6 +50,21 @@
 ``asset_refs`` 的解析顺序：本输出内的 asset ``id`` -> 本输出内 asset
 ``name``（归一化比较）-> ``existing_assets``（已注入的既有素材名，归一化比较）。
 引用可以带类型前缀（``"角色:林澈"``）。任何解析不到的引用都是错误。
+
+## ROUND58：模型输出形状的兼容契约
+
+DeepSeek 的系统提示词可能同时来自本项目的【输出契约】与 H3 提示词手册（后者要求
+``task_type / video_prompt / material_image_prompts / character_sheet`` 结构）。
+解析器因此在**边界**上兼容三种形状，但**兼容不等于吞错**：
+
+* ``script`` —— 本项目标准结构（``title`` / ``chapters`` / ``assets``）；
+* ``legacy`` —— 旧调用方形状（章节级 ``assets`` + ``type`` 键）；
+* ``handbook`` —— H3 手册结构（``video_prompt`` + ``material_image_prompts`` +
+  ``character_sheet``），由 :func:`adapt_script_output` 显式转换，**返回的 warnings
+  会写进结果元数据**，不会悄悄丢掉 ``video_prompt`` 或素材图提示词。
+
+:func:`adapt_script_output` 只做「形状/键名归一」，字段是否合法仍由
+:func:`validate_script` 严格判定；缺失必填字段依旧报出具体 ``path`` 与 ``code``。
 """
 
 from __future__ import annotations
@@ -70,9 +85,11 @@ __all__ = [
     "parse_with_report",
     "parse_script_output",
     "canonicalize_script",
+    "adapt_script_output",
     "validate_script",
     "SUPPORTED_OUTPUT_FORMATS",
     "SCRIPT_STRUCTURE_VERSION",
+    "ADAPTED_SHAPES",
 ]
 
 
@@ -242,11 +259,14 @@ def _json_dict_candidates(raw: str) -> list[tuple[str, str]]:
     return candidates
 
 
-def _try_parse_json(raw: str) -> tuple[dict, str] | None:
+def _try_parse_json(raw: str, *, depth: int = 0) -> tuple[dict, str] | None:
     """多策略 JSON 提取，返回 ``(dict, 来源说明)`` 或 ``None``（表示全部策略不适用）。
 
     ``None`` 的语义是「本输入不是合法 JSON」，由调用方抛 ``invalid_json``
     —— 这里不吞错：失败信息会在异常里体现，不会退化成「解析出半个结果」。
+
+    ROUND58：兼容「双重编码」——有些 OpenAI 兼容网关会把 ``content`` 再序列化成
+    一个 JSON 字符串（``"{\"chapters\": ...}"``），这里最多递归 3 层把它解开。
     """
     for source, text in _json_dict_candidates(raw):
         try:
@@ -255,6 +275,11 @@ def _try_parse_json(raw: str) -> tuple[dict, str] | None:
             continue  # 预期控制流：本策略不适用，继续尝试下一策略（最终失败->invalid_json）
         if isinstance(value, dict):
             return value, source
+        if isinstance(value, str) and depth < 3 and value.lstrip().startswith(("{", "[")):
+            nested = _try_parse_json(value, depth=depth + 1)
+            if nested is not None:
+                return nested[0], "double_encoded"
+            continue
         # 顶层是数组：不是合法剧本结构，但要让调用方拿到明确错误而不是「解析失败」。
         if isinstance(value, list):
             raise ScriptValidationError(
@@ -841,6 +866,711 @@ def _existing_name_set(existing_assets: Any) -> tuple[set[str], set[str]]:
     return ids, names
 
 
+# ---------------------------------------------------------------------------
+# ROUND58：模型输出形状适配（JSON 契约兼容层）
+# ---------------------------------------------------------------------------
+
+#: 适配后的形状名（写进 ``ScriptPromptResult.meta["output_shape"]``）。
+ADAPTED_SHAPES: tuple[str, ...] = ("script", "legacy", "handbook")
+
+#: 顶层键别名 -> 规范键。键统一经 :func:`_alias_key` 归一化后查表。
+_TOP_LEVEL_ALIASES: dict[str, str] = {
+    "assets": "assets",
+    "asset": "assets",
+    "assetlist": "assets",
+    "assetcards": "assets",
+    "assetcatalog": "assets",
+    "素材": "assets",
+    "素材列表": "assets",
+    "素材卡": "assets",
+    "素材清单": "assets",
+    "资产": "assets",
+    "资产列表": "assets",
+    "chapters": "chapters",
+    "chapter": "chapters",
+    "chapterlist": "chapters",
+    "章节": "chapters",
+    "章节列表": "chapters",
+    "分章": "chapters",
+    "title": "title",
+    "标题": "title",
+    "片名": "title",
+    "outputlanguage": "output_language",
+    "输出语言": "output_language",
+    "语言": "output_language",
+}
+
+#: 章节内「分镜段数组」的候选键（H3 手册/第三方常写 shots / 分镜）。
+_SEGMENT_LIST_KEYS: tuple[str, ...] = (
+    "segments",
+    "segment",
+    "shotlist",
+    "shots",
+    "storyboard",
+    "分镜",
+    "分镜段",
+    "镜头",
+    "段落",
+)
+_SEGMENT_LIST_KEYS_NORMALIZED: frozenset[str] = frozenset(
+    _alias_key(key) for key in _SEGMENT_LIST_KEYS
+)
+
+#: 外层封装键：OpenAI 兼容服务/自配接口常把业务 JSON 包在 data/result/script 里。
+_ENVELOPE_KEYS: tuple[str, ...] = (
+    "data",
+    "result",
+    "script",
+    "output",
+    "payload",
+    "response",
+    "剧本",
+    "结果",
+    "内容",
+    "数据",
+)
+_ENVELOPE_KEYS_NORMALIZED: frozenset[str] = frozenset(
+    _alias_key(key) for key in _ENVELOPE_KEYS
+)
+
+#: H3 提示词手册的输出标记（手册 5.2 与《精简版》的【输出格式】）。
+_HANDBOOK_MARKERS: tuple[str, ...] = (
+    "video_prompt",
+    "material_image_prompts",
+    "character_sheet",
+    "task_type",
+)
+
+#: 素材类别别名 -> ``models.enums.AssetType`` 的值。
+_ASSET_TYPE_ALIASES: dict[str, str] = {
+    "character": "CHARACTER",
+    "characters": "CHARACTER",
+    "person": "CHARACTER",
+    "role": "CHARACTER",
+    "portrait": "CHARACTER",
+    "人物": "CHARACTER",
+    "人物图": "CHARACTER",
+    "角色": "CHARACTER",
+    "角色图": "CHARACTER",
+    "主角": "CHARACTER",
+    "配角": "CHARACTER",
+    "scene": "SCENE",
+    "scenes": "SCENE",
+    "environment": "SCENE",
+    "background": "SCENE",
+    "场景": "SCENE",
+    "场景图": "SCENE",
+    "环境": "SCENE",
+    "背景": "SCENE",
+    "prop": "PROP",
+    "props": "PROP",
+    "object": "PROP",
+    "item": "PROP",
+    "物品": "PROP",
+    "物品图": "PROP",
+    "道具": "PROP",
+    "道具图": "PROP",
+    "物件": "PROP",
+    "shot": "SHOT",
+    "shots": "SHOT",
+    "storyboard": "SHOT",
+    "frame": "SHOT",
+    "分镜": "SHOT",
+    "分镜图": "SHOT",
+    "镜头": "SHOT",
+    "故事板": "SHOT",
+    "audio": "AUDIO",
+    "音频": "AUDIO",
+    "音色": "AUDIO",
+    "video": "VIDEO",
+    "视频": "VIDEO",
+    "参考视频": "VIDEO",
+}
+
+#: 合成素材名用的中文类别标签（仅当模型没给 name 时使用，并记 warning）。
+_ASSET_TYPE_LABELS_CN: dict[str, str] = {
+    "CHARACTER": "人物图",
+    "SCENE": "场景图",
+    "PROP": "道具图",
+    "SHOT": "分镜图",
+    "AUDIO": "音频参考",
+    "VIDEO": "视频参考",
+}
+
+#: H3 三字段：模型若按字段拆开输出，合并进 ``segments[].prompt``（不丢字段）。
+_H3_PROMPT_FIELDS: tuple[tuple[str, str], ...] = (
+    ("integrated_multimodal_description", "integrated_multimodal_description"),
+    ("overall_soundscape", "overall_soundscape"),
+    ("non_diegetic_music", "non_diegetic_music"),
+)
+
+
+def _map_asset_type(raw: Any) -> str | None:
+    """把中英文素材类别写法映射到 ``AssetType`` 值；未知返回 ``None``。"""
+    if raw is None:
+        return None
+    key = _alias_key(str(raw))
+    if not key:
+        return None
+    return _ASSET_TYPE_ALIASES.get(key)
+
+
+def _as_text(value: Any) -> str:
+    """把模型可能给出的多种「文本容器」抽成字符串（只拼接，不改写内容）。"""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        chunks = [_as_text(item) for item in value]
+        return "\n".join(chunk for chunk in chunks if chunk)
+    if isinstance(value, Mapping):
+        for key in ("text", "content", "prompt", "value", "description"):
+            if key in value:
+                text = _as_text(value[key])
+                if text:
+                    return text
+        # H3 三字段对象：按字段名逐行输出，字段不丢。
+        h3_lines: list[str] = []
+        for field, label in _H3_PROMPT_FIELDS:
+            text = _as_text(value.get(field))
+            if text:
+                h3_lines.append(f"{label}: {text}")
+        if h3_lines:
+            return "\n".join(h3_lines)
+        return ""
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return str(value)
+    return ""
+
+
+def _as_list(value: Any) -> list:
+    """把单对象/逗号串/JSON 数组统一成 list（保持输入顺序）。"""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return list(value)
+    if isinstance(value, tuple):
+        return list(value)
+    if isinstance(value, Mapping):
+        return [value]
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        if text.startswith("["):
+            try:
+                parsed = json.loads(text)
+            except (json.JSONDecodeError, ValueError):
+                parsed = _NOT_JSON
+            if isinstance(parsed, list):
+                return parsed
+        return [part.strip() for part in re.split(r"[,，、;；\n]+", text) if part.strip()]
+    return [value]
+
+
+def _looks_like_script(obj: Mapping) -> bool:
+    """是否带本项目的剧本骨架（assets / chapters，含别名）。"""
+    keys = {_alias_key(str(key)) for key in obj}
+    return any(_TOP_LEVEL_ALIASES.get(key) in ("assets", "chapters") for key in keys)
+
+
+def _looks_like_handbook(obj: Mapping) -> bool:
+    """是否是 H3 提示词手册要求的输出结构。"""
+    return any(key in obj for key in _HANDBOOK_MARKERS)
+
+
+def _is_legacy_shape(obj: Mapping) -> bool:
+    """旧形状：素材用 ``type`` 键，或 assets 挂在章节级。"""
+    for key in obj:
+        if _TOP_LEVEL_ALIASES.get(_alias_key(str(key))) != "assets":
+            continue
+        items = obj.get(key)
+        if isinstance(items, list) and any(
+            isinstance(item, Mapping) and "type" in item for item in items
+        ):
+            return True
+    chapters = obj.get("chapters")
+    if isinstance(chapters, list):
+        return any(isinstance(ch, Mapping) and "assets" in ch for ch in chapters)
+    return False
+
+
+def _rename_record_fields(record: Mapping) -> tuple[dict, list[str]]:
+    """按 :data:`_FIELD_ALIASES` 把字段别名改成规范名（未知键原样保留）。"""
+    out: dict[str, Any] = {}
+    duplicates: list[str] = []
+    for key, value in record.items():
+        canonical = _FIELD_ALIASES.get(_alias_key(str(key)))
+        if canonical is None:
+            out.setdefault(str(key), value)
+            continue
+        if canonical in out:
+            duplicates.append(f"{key}->{canonical}")
+            continue
+        out[canonical] = value
+    return out, duplicates
+
+
+def _coerce_number(text: str) -> Any:
+    """``"10"`` -> 10，``"10.5"`` -> 10.5，其它返回 ``None``。"""
+    stripped = str(text).strip()
+    if re.fullmatch(r"-?\d+", stripped):
+        return int(stripped)
+    if re.fullmatch(r"-?\d+\.\d+", stripped):
+        return float(stripped)
+    return None
+
+
+def _normalize_asset_record(record: Mapping, *, index: int, warnings: list[str]) -> dict:
+    out, duplicates = _rename_record_fields(record)
+    if duplicates:
+        warnings.append(
+            f"assets[{index}] 同时出现规范字段与别名（已保留先出现的）：{', '.join(duplicates)}"
+        )
+    if out.get("asset_type") is not None:
+        mapped = _map_asset_type(out["asset_type"])
+        if mapped is not None:
+            if str(out["asset_type"]).strip().upper() != mapped:
+                warnings.append(
+                    f"assets[{index}].asset_type={out['asset_type']!r} 已归一为 {mapped}"
+                )
+            out["asset_type"] = mapped
+    for key in ("id", "name", "source", "library_scope"):
+        if out.get(key) is not None and not isinstance(out[key], str):
+            out[key] = str(out[key])
+    if out.get("prompt") is not None and not isinstance(out["prompt"], str):
+        out["prompt"] = _as_text(out["prompt"])
+    if not str(out.get("prompt") or "").strip():
+        description = _as_text(out.get("description"))
+        if description:
+            out["prompt"] = description
+            warnings.append(
+                f"assets[{index}] 缺少 prompt，已用 description 作为素材提示词"
+                "（请让模型按【输出契约】输出 prompt）"
+            )
+    if out.get("negative_prompt") is not None and not isinstance(
+        out["negative_prompt"], str
+    ):
+        out["negative_prompt"] = _as_text(out["negative_prompt"])
+    if "tags" in out:
+        out["tags"] = _as_list(out["tags"])
+    return out
+
+
+def _normalize_segment_record(record: Mapping, *, path: str, warnings: list[str]) -> dict:
+    out, duplicates = _rename_record_fields(record)
+    if duplicates:
+        warnings.append(
+            f"{path} 同时出现规范字段与别名（已保留先出现的）：{', '.join(duplicates)}"
+        )
+    index_value = out.get("segment_index")
+    if isinstance(index_value, str):
+        number = _coerce_number(index_value)
+        if number is not None:
+            out["segment_index"] = number
+    duration = out.get("duration_s")
+    if isinstance(duration, str):
+        number = _coerce_number(duration)
+        if number is not None:
+            out["duration_s"] = number
+    prompt = out.get("prompt")
+    if prompt is not None and not isinstance(prompt, str):
+        out["prompt"] = _as_text(prompt)
+    if not str(out.get("prompt") or "").strip():
+        merged: list[str] = []
+        for field, label in _H3_PROMPT_FIELDS:
+            text = _as_text(out.get(field))
+            if text:
+                merged.append(f"{label}: {text}")
+        if merged:
+            out["prompt"] = "\n".join(merged)
+            warnings.append(
+                f"{path}.prompt 缺失，已把 H3 三字段（integrated_multimodal_description / "
+                "overall_soundscape / non_diegetic_music）合并进 prompt"
+            )
+    if "asset_refs" not in out:
+        out["asset_refs"] = []
+        warnings.append(f"{path}.asset_refs 缺失，已按空数组处理（不阻塞素材生成）")
+    else:
+        normalized_refs: list[Any] = []
+        for ref in _as_list(out["asset_refs"]):
+            if isinstance(ref, Mapping):
+                normalized_refs.append({str(k): v for k, v in ref.items()})
+            elif isinstance(ref, str):
+                text = ref.strip()
+                if text:
+                    normalized_refs.append(text)
+            elif ref is not None:
+                normalized_refs.append(str(ref))
+        out["asset_refs"] = normalized_refs
+    for key in ("first_frame_ref", "last_frame_ref"):
+        if out.get(key) is not None and not isinstance(out[key], str):
+            out[key] = _as_text(out[key])
+    return out
+
+
+def _normalize_chapter_record(record: Mapping, *, index: int, warnings: list[str]) -> dict:
+    out, duplicates = _rename_record_fields(record)
+    if duplicates:
+        warnings.append(
+            f"chapters[{index}] 同时出现规范字段与别名（已保留先出现的）：{', '.join(duplicates)}"
+        )
+    # 旧形状允许把 assets 挂在章节级：先归一字段名/取值，再交给 _merge_chapter_assets。
+    if "assets" in out:
+        chapter_assets: list[Any] = []
+        for ai, item in enumerate(_as_list(out["assets"])):
+            if isinstance(item, Mapping):
+                chapter_assets.append(
+                    _normalize_asset_record(
+                        item,
+                        index=ai,
+                        warnings=warnings,
+                    )
+                )
+            else:
+                chapter_assets.append(item)
+        out["assets"] = chapter_assets
+    segments_key: str | None = None
+    for key in out:
+        if _alias_key(str(key)) in _SEGMENT_LIST_KEYS_NORMALIZED:
+            segments_key = str(key)
+            break
+    if segments_key is not None and segments_key != "segments":
+        out["segments"] = out.pop(segments_key)
+        warnings.append(f"chapters[{index}].{segments_key} 已按别名映射为 segments")
+    if "segments" in out:
+        raw_segments = _as_list(out["segments"])
+        segments: list[Any] = []
+        for si, seg in enumerate(raw_segments):
+            if isinstance(seg, Mapping):
+                segments.append(
+                    _normalize_segment_record(
+                        seg,
+                        path=f"$.chapters[{index}].segments[{si}]",
+                        warnings=warnings,
+                    )
+                )
+            else:
+                segments.append(seg)
+        out["segments"] = segments
+    return out
+
+
+def _normalize_top_level(script: Mapping, warnings: list[str]) -> dict:
+    """顶层键别名归一 + 单章节/顶层分镜段的兜底包装。"""
+    out: dict[str, Any] = {}
+    for key, value in script.items():
+        canonical = _TOP_LEVEL_ALIASES.get(_alias_key(str(key)))
+        if canonical is None:
+            out.setdefault(str(key), value)
+            continue
+        if canonical in out:
+            warnings.append(f"顶层键 {key!r} 与 {canonical!r} 重复，已保留先出现的一份")
+            continue
+        out[canonical] = value
+        if str(key) != canonical:
+            warnings.append(f"顶层键 {key!r} 已按别名映射为 {canonical!r}")
+    chapters = out.get("chapters")
+    if isinstance(chapters, Mapping):
+        out["chapters"] = [chapters]
+        warnings.append("chapters 是单个对象，已包成单元素数组")
+    elif chapters is not None and not isinstance(chapters, list):
+        out["chapters"] = _as_list(chapters)
+        warnings.append("chapters 不是数组，已按列表解析")
+    if "chapters" not in out:
+        for key in list(out):
+            if _alias_key(str(key)) in _SEGMENT_LIST_KEYS_NORMALIZED:
+                out["chapters"] = [{"segments": out.pop(key)}]
+                warnings.append(f"顶层键 {key!r} 被当作分镜段数组，已包成隐式章节")
+                break
+    return out
+
+
+def _normalize_script_records(script: Mapping, warnings: list[str]) -> dict:
+    """逐条归一 assets / chapters / segments 的字段名与取值形态。"""
+    out = dict(script)
+    if "assets" in out:
+        assets: list[Any] = []
+        for i, item in enumerate(_as_list(out["assets"])):
+            if isinstance(item, Mapping):
+                assets.append(_normalize_asset_record(item, index=i, warnings=warnings))
+            else:
+                assets.append(item)
+        out["assets"] = assets
+    chapters = out.get("chapters")
+    if isinstance(chapters, list):
+        normalized: list[Any] = []
+        for ci, chapter in enumerate(chapters):
+            if isinstance(chapter, Mapping):
+                normalized.append(
+                    _normalize_chapter_record(chapter, index=ci, warnings=warnings)
+                )
+            else:
+                normalized.append(chapter)
+        out["chapters"] = normalized
+    return out
+
+
+def _merge_chapter_assets(script: dict, warnings: list[str]) -> dict:
+    """把章节级 ``assets`` 合并到顶层（顶层优先；按 id/name 去重）。"""
+    chapters = script.get("chapters")
+    if not isinstance(chapters, list):
+        chapters = []
+    merged: list[dict] = []
+    seen: set[str] = set()
+
+    def _absorb(items: Any) -> None:
+        for item in _as_list(items):
+            if not isinstance(item, Mapping):
+                continue
+            rec = dict(item)
+            key = str(rec.get("id") or rec.get("name") or "")
+            if key and key in seen:
+                warnings.append(f"素材 {key!r} 在多处重复出现，已保留先出现的一份")
+                continue
+            if key:
+                seen.add(key)
+            merged.append(rec)
+
+    _absorb(script.get("assets"))
+    for index, chapter in enumerate(chapters):
+        if not isinstance(chapter, Mapping):
+            continue
+        chapter_assets = chapter.get("assets")
+        if chapter_assets is None:
+            continue
+        before = len(merged)
+        _absorb(chapter_assets)
+        if len(merged) > before:
+            warnings.append(f"chapters[{index}].assets 已合并到顶层 assets")
+        # 吸收后移除章节级副本：留着会让人（和下游）以为还有第二份。
+        chapter.pop("assets", None)
+    script["assets"] = merged
+    return script
+
+
+def _unwrap_envelopes(script: Mapping, warnings: list[str], *, depth: int = 0) -> Mapping:
+    """解开 ``{"data": {...}}`` / ``{"result": "{...}"}`` 之类外层封装。"""
+    if depth >= 3 or _looks_like_script(script):
+        return script
+    for key, value in script.items():
+        if _alias_key(str(key)) not in _ENVELOPE_KEYS_NORMALIZED:
+            continue
+        inner: Any = value
+        if isinstance(inner, str):
+            parsed = _try_parse_json(inner)
+            inner = parsed[0] if parsed is not None else None
+        if isinstance(inner, Mapping) and (
+            _looks_like_script(inner) or _looks_like_handbook(inner)
+        ):
+            warnings.append(f"已解开外层封装键 {key!r}（业务 JSON 在其内部）")
+            return _unwrap_envelopes(copy.deepcopy(dict(inner)), warnings, depth=depth + 1)
+    return script
+
+
+def _synthetic_asset_name(asset_type: str, counters: dict[str, int]) -> str:
+    label = _ASSET_TYPE_LABELS_CN.get(asset_type, asset_type or "素材")
+    counters[label] = counters.get(label, 0) + 1
+    return f"{label}{counters[label]}"
+
+
+def _convert_handbook(script: Mapping, warnings: list[str]) -> dict:
+    """把 H3 手册结构转成本项目标准脚本结构（字段显式搬运，不丢内容）。"""
+    errors: list[dict] = []
+    video_prompt = _as_text(script.get("video_prompt"))
+    if not video_prompt:
+        errors.append(
+            _fail(
+                "$.video_prompt",
+                "handbook_missing_video_prompt",
+                "识别为 H3 手册结构（task_type / video_prompt / material_image_prompts / "
+                "character_sheet），但 video_prompt 缺失或不是非空文本；本项目要求 "
+                "chapters[].segments[].prompt 非空。请让模型按【输出契约】输出，或补上 video_prompt",
+            )
+        )
+
+    assets: list[dict] = []
+    used_names: set[str] = set()
+    counters: dict[str, int] = {}
+
+    material = _as_list(script.get("material_image_prompts"))
+    for index, item in enumerate(material):
+        path = f"$.material_image_prompts[{index}]"
+        if not isinstance(item, Mapping):
+            errors.append(_fail(path, "invalid_type", "素材图提示词条目必须是对象"))
+            continue
+        type_raw = item.get("type") or item.get("asset_type") or item.get("类别")
+        asset_type = _map_asset_type(type_raw)
+        if asset_type is None:
+            errors.append(
+                _fail(
+                    f"{path}.type",
+                    "invalid_asset_type",
+                    f"type={type_raw!r} 无法映射到素材类别；允许：人物图/场景图/道具图/分镜图"
+                    "（或 CHARACTER/SCENE/PROP/SHOT/AUDIO/VIDEO）",
+                )
+            )
+        prompt = _as_text(item.get("prompt"))
+        if not prompt:
+            errors.append(_fail(f"{path}.prompt", "missing_field", "素材图提示词缺少非空 prompt"))
+            continue
+        name = _as_text(item.get("name"))
+        if not name:
+            name = _synthetic_asset_name(asset_type or "SHOT", counters)
+            warnings.append(f"{path} 未给 name，已按类别合成名称 {name!r}")
+        norm = normalize_name(name)
+        if norm in used_names:
+            base = name
+            suffix = 2
+            while normalize_name(f"{base}{suffix}") in used_names:
+                suffix += 1
+            name = f"{base}{suffix}"
+            norm = normalize_name(name)
+            warnings.append(f"{path} 名称重复，已改为 {name!r}（避免素材名归一化冲突）")
+        used_names.add(norm)
+        record: dict[str, Any] = {
+            "id": _as_text(item.get("id")) or f"A{len(assets) + 1}",
+            "asset_type": asset_type or "SHOT",
+            "name": name,
+            "prompt": prompt,
+        }
+        negative = _as_text(item.get("negative_prompt"))
+        if negative:
+            record["negative_prompt"] = negative
+        description = _as_text(item.get("description"))
+        if description:
+            record["description"] = description
+        assets.append(record)
+
+    character_sheet = _as_list(script.get("character_sheet"))
+    has_character_asset = any(record.get("asset_type") == "CHARACTER" for record in assets)
+    if character_sheet and has_character_asset:
+        # 手册语义：character_sheet 是「角色登记表」，人物图提示词在 material_image_prompts 里。
+        # 已经有人物图时不再重复造 CHARACTER 素材（否则会多生成一张重复人物图）。
+        names = [
+            _as_text(person.get("name")) or _as_text(person.get("speaker_id"))
+            for person in character_sheet
+            if isinstance(person, Mapping)
+        ]
+        listed = "、".join(name for name in names if name)
+        warnings.append(
+            "character_sheet 中的角色"
+            + (f"（{listed}）" if listed else "")
+            + "未转成额外素材：已有人物图提示词；建议让模型把角色名写进 assets[].name，"
+            "以便与分镜 asset_refs 对齐"
+        )
+    else:
+        for index, person in enumerate(character_sheet):
+            path = f"$.character_sheet[{index}]"
+            if not isinstance(person, Mapping):
+                errors.append(_fail(path, "invalid_type", "角色登记表条目必须是对象"))
+                continue
+            name = _as_text(person.get("name")) or _as_text(person.get("speaker_id"))
+            if not name:
+                errors.append(_fail(path, "missing_field", "角色登记表条目缺少 name/speaker_id"))
+                continue
+            if normalize_name(name) in used_names:
+                continue
+            prompt = "，".join(
+                part
+                for part in (
+                    _as_text(person.get("appearance")),
+                    _as_text(person.get("costume")),
+                )
+                if part
+            )
+            if not prompt:
+                warnings.append(
+                    f"{path} 的 appearance/costume 都为空，无法生成人物图提示词，已跳过"
+                )
+                continue
+            used_names.add(normalize_name(name))
+            assets.append(
+                {
+                    "id": f"A{len(assets) + 1}",
+                    "asset_type": "CHARACTER",
+                    "name": name,
+                    "prompt": prompt,
+                }
+            )
+            warnings.append(
+                f"{path} 已转换为 CHARACTER 素材（prompt 由 appearance/costume 拼接）"
+            )
+
+    if errors:
+        raise ScriptValidationError(errors)
+    if not assets:
+        warnings.append("H3 手册结构未提供任何素材图提示词：assets 为空（仍会生成视频段）")
+
+    chapter: dict[str, Any] = {
+        "chapter_id": "CH001",
+        "segments": [
+            {"segment_index": 1, "prompt": video_prompt, "asset_refs": []}
+        ],
+    }
+    title = _as_text(script.get("title")) or _as_text(script.get("task_type"))
+    if title:
+        chapter["title"] = title
+    converted: dict[str, Any] = {
+        "title": title or "H3 手册输出（已适配）",
+        "chapters": [chapter],
+        "assets": assets,
+    }
+    for key in ("task_type", "notes", "output_language", "character_sheet"):
+        if key in script:
+            converted[key] = script[key]
+    warnings.append(
+        "已把 H3 手册结构转换为标准剧本结构：video_prompt → chapters[0].segments[0].prompt；"
+        "material_image_prompts → assets[]；asset_refs 为空（首尾帧请在导演台指定）"
+    )
+    return converted
+
+
+def adapt_script_output(parsed: Mapping | dict) -> tuple[dict, tuple[str, ...], str]:
+    """把模型输出适配为 :func:`validate_script` 认的规范形状。
+
+    返回 ``(script, warnings, shape)``：
+
+    * ``shape="script"`` —— 本来就是标准结构；
+    * ``shape="legacy"`` —— 旧调用方形状（``type`` 键 / 章节级 assets）；
+    * ``shape="handbook"`` —— H3 手册形状（``video_prompt`` + 素材图提示词）。
+
+    ``warnings`` 必须由调用方写进结果元数据（例如
+    ``ScriptPromptResult.meta["notes"]``），这样「字段被改名/合成」是**可见的**，
+    不会被当成无损耗的解析。字段合法性仍由 :func:`validate_script` 严格判定。
+    """
+    if not isinstance(parsed, Mapping):
+        raise ScriptValidationError(
+            [_fail("$", "invalid_type", f"剧本必须是 JSON 对象，收到 {type(parsed).__name__}")]
+        )
+
+    original = copy.deepcopy(dict(parsed))
+    warnings: list[str] = []
+    script = _unwrap_envelopes(copy.deepcopy(original), warnings)
+    script = _normalize_top_level(script, warnings)
+
+    if _looks_like_script(script):
+        shape = "legacy" if _is_legacy_shape(original) else "script"
+        normalized = _normalize_script_records(script, warnings)
+        normalized = _merge_chapter_assets(normalized, warnings)
+        return normalized, tuple(warnings), shape
+
+    if _looks_like_handbook(script):
+        return _convert_handbook(script, warnings), tuple(warnings), "handbook"
+
+    keys = ", ".join(sorted(str(key) for key in original)) or "（空对象）"
+    raise ScriptValidationError(
+        [
+            _fail(
+                "$",
+                "unrecognized_output_shape",
+                f"无法识别的输出结构：顶层键 {keys}。本项目契约要求顶层包含 assets 与 chapters；"
+                "兼容旧形状（type 键 / 章节级 assets）与 H3 手册形状"
+                "（video_prompt + material_image_prompts + character_sheet）",
+            )
+        ]
+    )
+
+
 def canonicalize_script(parsed: Mapping | dict) -> dict:
     """把**老形状**的剧本规整成 :func:`validate_script` 认的规范形状。
 
@@ -861,64 +1591,29 @@ def canonicalize_script(parsed: Mapping | dict) -> dict:
     按 ``AGENTS.md``：「Normalize third-party or upstream return conventions
     at the integration boundary.」—— 就在边界上归一，两边都不用改形状。
 
-    ## 规整规则
+    ## 规整规则（ROUND58 扩展后）
 
     1. **位置**：章节级 ``chapters[].assets`` 合并到顶层 ``assets``
        （顶层优先；按 ``id`` 去重，保持出现顺序）；
-    2. **键名**：``type`` -> ``asset_type``（已经叫 ``asset_type`` 的不动）；
-    3. 不改动其它任何字段，也不做校验 —— 校验交给 ``validate_script``
+    2. **键名**：``type`` -> ``asset_type``，中文/别名字段 -> 规范字段
+       （``素材`` -> ``assets``、``章节`` -> ``chapters``、``分镜`` -> ``segments`` 等）；
+    3. **取值形态**：``asset_refs`` 逗号串 -> 数组、``segment_index``/``duration_s``
+       数字串 -> 数字；缺失的 ``asset_refs`` 按空数组并记 warning；
+    4. 不改动其它任何字段，也不做校验 —— 校验交给 ``validate_script``
        （这样「无效引用/重复 ID」仍然会被拦，不会因为规整而放过）。
 
-    返回**深拷贝**，不改入参。
+    返回**深拷贝**，不改入参。需要 warnings 与形状名时用
+    :func:`adapt_script_output`（本函数是它的无 warnings 版本）。
     """
     if not isinstance(parsed, Mapping):
         raise ScriptValidationError(
-            [_fail("$", "invalid_type",
-                   f"剧本必须是 JSON 对象，收到 {type(parsed).__name__}")]
+            [_fail("$", "invalid_type", f"剧本必须是 JSON 对象，收到 {type(parsed).__name__}")]
         )
 
-    script = copy.deepcopy(dict(parsed))
-    chapters = script.get("chapters")
-    if not isinstance(chapters, list):
-        chapters = []
-
-    def _normalize_asset(item: Any) -> Any:
-        if not isinstance(item, Mapping):
-            return item
-        rec = dict(item)
-        if "asset_type" not in rec and "type" in rec:
-            rec["asset_type"] = rec.pop("type")
-        return rec
-
-    merged: list[dict] = []
-    seen_ids: set[str] = set()
-
-    def _absorb(items: Any) -> None:
-        if not isinstance(items, list):
-            return
-        for item in items:
-            rec = _normalize_asset(item)
-            if not isinstance(rec, Mapping):
-                continue
-            key = str(rec.get("id") or rec.get("name") or "")
-            if key and key in seen_ids:
-                continue          # 同一素材在两处都写了：保留先出现的
-            if key:
-                seen_ids.add(key)
-            merged.append(dict(rec))
-
-    # 顶层优先，然后按章节顺序吸收章节级的
-    _absorb(script.get("assets"))
-    for ch in chapters:
-        if isinstance(ch, Mapping):
-            _absorb(ch.get("assets"))
-            # 吸收后**移除章节级副本**：留着会让人（和下游）以为还有第二份，
-            # 也可能被别的代码再读一次导致重复处理。规整后只有顶层一处。
-            if "assets" in ch:
-                ch.pop("assets", None)
-
-    script["assets"] = merged
-    return script
+    warnings: list[str] = []
+    script = _normalize_top_level(copy.deepcopy(dict(parsed)), warnings)
+    script = _normalize_script_records(script, warnings)
+    return _merge_chapter_assets(script, warnings)
 
 
 def validate_script(parsed: dict, *, existing_assets: Iterable | None = None,

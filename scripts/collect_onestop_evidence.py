@@ -56,7 +56,7 @@ from pathlib import Path
 from typing import Any
 
 REPO = Path(__file__).resolve().parent.parent
-REMOTE_BRIDGE = Path(r"C:\Users\Administrator\AppData\Local\Temp\bcu_remote.py")
+REMOTE_BRIDGE = Path(r"[USER-HOME]\AppData\Local\Temp\bcu_remote.py")
 REMOTE_CACHE = REPO / "remote_reports" / "remote_pulled"
 OUT_JSON = REPO / "remote_reports" / "onestop_summary.json"
 OUT_MD = REPO / "remote_reports" / "onestop_summary.md"

@@ -106,6 +106,32 @@ class ShiftedModelCache:
         self._items.clear()
 
 
+def maybe_wrap_spatial_tiles(
+    sampler,
+    *,
+    enable_tiling: bool,
+    tile_count: int = 2,
+    tile_overlap: int = 128,
+):
+    """ROUND55：主采样器的「空间分块」唯一接线点（tiled 采样）。
+
+    * ``enable_tiling=False``（默认/旧行为）→ 返回 ``None`` 且**完全不触碰** sampler；
+      调用方原本 `restore_tiles = None`，因此 0 路径逐行等价、结果不变。
+    * ``enable_tiling=True`` → 懒导入 ``spatial_tiled_sampling``，把
+      ``sampler.sampler_function`` 包成分块版本，返回 restore 回调；
+      vendor 侧 ``n_tiles<=1`` 仍会返回空操作回调（与改造前一致）。
+    """
+    if not enable_tiling:
+        return None
+    from .spatial_tiled_sampling import wrap_sampler_spatial_tiles
+
+    return wrap_sampler_spatial_tiles(
+        sampler,
+        n_tiles=tile_count,
+        overlap_pixels=tile_overlap,
+    )
+
+
 def sample_single_stage(
     *,
     model,
@@ -183,15 +209,13 @@ def sample_single_stage(
         noise_obj = _ZeroNoise()
     else:
         noise_obj = _unpack_node_output(RandomNoise.execute(int(seed)))[0]
-    restore_tiles = None
-    if enable_tiling:
-        from .spatial_tiled_sampling import wrap_sampler_spatial_tiles
-
-        restore_tiles = wrap_sampler_spatial_tiles(
-            sampler_obj,
-            n_tiles=tile_count,
-            overlap_pixels=tile_overlap,
-        )
+    # ROUND55：tiled 空间分块（默认关；关闭时返回 None，与旧版路径完全一致）
+    restore_tiles = maybe_wrap_spatial_tiles(
+        sampler_obj,
+        enable_tiling=bool(enable_tiling),
+        tile_count=tile_count,
+        tile_overlap=tile_overlap,
+    )
 
     neg = negative if negative else []
     if _use_basic_guider(cfg, neg):

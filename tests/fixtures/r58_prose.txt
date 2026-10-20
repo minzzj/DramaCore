@@ -1,0 +1,38 @@
+我先说明拆解思路：本段只有一个场景，需要角色图与场景图各一张，视频段 1 个。
+
+现在给出标准 JSON：
+
+{
+  "title": "雪夜长街",
+  "chapters": [
+    {
+      "chapter_id": "CH001",
+      "title": "雪夜",
+      "summary": "林澈独行雪夜长街。",
+      "segments": [
+        {
+          "segment_index": 1,
+          "prompt": "integrated_multimodal_description: [Shot 1] Live-action, cinematic, a young swordsman walks alone down a snowy street at night. overall_soundscape: Wind and soft footsteps. non_diegetic_music: Low strings.",
+          "asset_refs": ["A1", "A2"],
+          "duration_s": 10
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "A1",
+      "asset_type": "CHARACTER",
+      "name": "林澈",
+      "prompt": "Chinese young swordsman, white linen robe, cinematic portrait, medium shot, cold moonlight"
+    },
+    {
+      "id": "A2",
+      "asset_type": "SCENE",
+      "name": "雪夜长街",
+      "prompt": "Ancient Chinese street at night under heavy snow, red lanterns, cold blue moonlight, cinematic wide shot"
+    }
+  ]
+}
+
+希望这个结构符合你的工作流；需要我继续拆下一章就告诉我。

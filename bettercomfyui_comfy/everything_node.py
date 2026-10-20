@@ -56,6 +56,13 @@ from typing import Any
 __all__ = [
     "BetterComfyUIEverything",
     "SYSTEM_PROMPT_CHOICES",
+    "LEGACY_SYSTEM_PROMPT_LABELS",
+    "SYSTEM_PROMPT_DEFAULT_KEY",
+    "default_system_prompt_label",
+    "system_prompt_key",
+    "system_prompt_label",
+    "is_system_prompt_preset",
+    "resolve_template_choice",
     "STYLE_TAGS",
     "NODE_CLASS_MAPPINGS",
     "NODE_DISPLAY_NAME_MAPPINGS",
@@ -64,13 +71,106 @@ __all__ = [
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 #: 界面上的系统提示词选择 → 编排层 `SYSTEM_PROMPT_PRESETS` 的键（图一 C1）。
+#: ROUND58：**默认**换成《MiniMax H3 提示词工程精简版》V1.0（2026-10，12,890 字）——
+#: 系统提示词 1（编译器 Master）+ 系统提示词 2（素材图）+ 提示词片段库；
+#: 历史完整手册（41,966 字）与旧核心章节**保留为可选项**（旧版不删）。
 SYSTEM_PROMPT_CHOICES: dict[str, str] = {
+    "H3 提示词精简版（2026-10，推荐）": "h3_concise_v1",
+    "H3 手册（完整，历史版）": "h3_handbook",
+    "H3 手册（精简）": "h3_core",
     "默认（影视拆解，推荐）": "default",
     "严格 JSON": "strict_json",
     "中文影视剧": "chinese_drama",
     "按镜头": "shot_by_shot",
     "本地简化（千问）": "local_qwen",
 }
+
+#: ROUND58 默认预设键（面板为空 / 节点用默认值时走这里）。
+SYSTEM_PROMPT_DEFAULT_KEY = "h3_concise_v1"
+
+#: ROUND56 及更早版本保存的工作流里存的是**旧标签**；改标签不能让它们静默掉到 default。
+LEGACY_SYSTEM_PROMPT_LABELS: dict[str, str] = {
+    "H3 手册（完整，推荐）": "h3_handbook",
+    "H3 手册（完整）": "h3_handbook",
+    "H3 提示词精简版": "h3_concise_v1",
+    "H3 提示词精简版（推荐）": "h3_concise_v1",
+}
+
+
+def default_system_prompt_label() -> str:
+    """默认系统提示词标签 = 列表第一项（ROUND58 起是 H3 提示词精简版）。"""
+    return next(iter(SYSTEM_PROMPT_CHOICES))
+
+
+def system_prompt_key(label: str) -> str:
+    """界面标签 → 预设键；旧标签（ROUND56 之前保存的工作流）也解析。未知 → ``default``。"""
+    text = str(label or "").strip()
+    if text in SYSTEM_PROMPT_CHOICES:
+        return SYSTEM_PROMPT_CHOICES[text]
+    if text in LEGACY_SYSTEM_PROMPT_LABELS:
+        return LEGACY_SYSTEM_PROMPT_LABELS[text]
+    return "default"
+
+
+def system_prompt_label(key: str) -> str:
+    """预设键 → 界面标签；旧标签/别名也认。未知或空 → 默认标签（ROUND58 精简版）。"""
+    text = str(key or "").strip()
+    if not text:
+        return default_system_prompt_label()
+    for label, mapped in SYSTEM_PROMPT_CHOICES.items():
+        if mapped == text:
+            return label
+    if text in LEGACY_SYSTEM_PROMPT_LABELS:
+        return system_prompt_label(LEGACY_SYSTEM_PROMPT_LABELS[text])
+    try:  # h3_handbook 的别名（concise / full / core / 精简版 …）也当预设键
+        from bettercomfyui.prompt.h3_handbook import canonical_preset
+
+        canonical = canonical_preset(text)
+    except Exception:  # noqa: BLE001 - 手册模块不可用不该影响界面
+        canonical = ""
+    if canonical:
+        for label, mapped in SYSTEM_PROMPT_CHOICES.items():
+            if mapped == canonical:
+                return label
+    return default_system_prompt_label()
+
+
+def is_system_prompt_preset(value: str) -> bool:
+    """这个值是不是「预设」（而不是一整段自定义系统提示词）。"""
+    text = str(value or "").strip()
+    if not text:
+        return False
+    if text in SYSTEM_PROMPT_CHOICES or text in SYSTEM_PROMPT_CHOICES.values():
+        return True
+    if text in LEGACY_SYSTEM_PROMPT_LABELS:
+        return True
+    try:
+        from bettercomfyui.prompt.h3_handbook import is_handbook_preset
+
+        return bool(is_handbook_preset(text))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def resolve_template_choice(label: str, custom: str = "", panel_value: str = "") -> str:
+    """决定本次要用的系统提示词模板（预设键 / 预设标签 / 自定义全文）。
+
+    优先级（与节点行为一致，供单测直接调用）：
+    1. ``custom`` 非空 → 用户显式自定义全文，原样用；
+    2. ``label`` 以「跟随面板配置」开头 → 用面板值；**面板为空 → ROUND58 默认精简版**；
+    3. 其它 → 标签对应的预设键（未知标签回落 ``default``）。
+    """
+    custom_text = str(custom or "").strip()
+    if custom_text:
+        return custom_text
+    if str(label or "").startswith("跟随面板配置"):
+        panel = str(panel_value or "").strip()
+        if not panel:
+            return SYSTEM_PROMPT_DEFAULT_KEY
+        if panel in SYSTEM_PROMPT_CHOICES or panel in LEGACY_SYSTEM_PROMPT_LABELS:
+            return system_prompt_key(panel)  # 面板里存的是旧标签 → 收口成预设键
+        return panel
+    return system_prompt_key(label)
 
 #: 图一 SG1 `C6` 风格标签库（可勾选的画风词表；`@标签名` 展开）。
 STYLE_TAGS = {
@@ -346,8 +446,10 @@ class BetterComfyUIEverything:
                     "tooltip": "一整段完整剧本（可多章节）。整条链**只调用一次 API**。",
                 }),
                 "系统提示词选择": (list(SYSTEM_PROMPT_CHOICES), {
-                    "default": next(iter(SYSTEM_PROMPT_CHOICES)),
-                    "tooltip": "图一 C1 预置模板；想完全自定义用下面的「自定义系统提示词」。",
+                    "default": default_system_prompt_label(),
+                    "tooltip": ("图一 C1 预置模板；默认「H3 提示词精简版（2026-10，12,890 字）」"
+                                "（系统提示词 1 编译器 + 系统提示词 2 素材图 + 片段库）；"
+                                "历史完整版/旧精简版仍可选。想完全自定义用下面的「自定义系统提示词」。"),
                 }),
                 "自定义系统提示词": ("STRING", {
                     "multiline": True, "default": "",
@@ -426,7 +528,7 @@ class BetterComfyUIEverything:
     def run(
         self,
         剧本: str,
-        系统提示词选择: str = next(iter(SYSTEM_PROMPT_CHOICES)),
+        系统提示词选择: str = default_system_prompt_label(),
         自定义系统提示词: str = "",
         风格标签: str = "",
         统一风格: str = DEFAULT_STYLE,
@@ -470,9 +572,20 @@ class BetterComfyUIEverything:
 
         # ---- 1) API 配置：端口优先，其次服务器配置 ------------------------
         api = _resolve_api()
+        key_explicit = bool(str(api_key or "").strip())
         key = str(api_key or "").strip() or str(api.get("api_key") or "")
         model_name = str(model or "").strip() or str(api.get("model") or "deepseek-chat")
-        base = str(api_base or "").strip() or str(api.get("api_base") or "")
+        panel_base = str(api.get("api_base") or "").strip().rstrip("/")
+        node_base = str(api_base or "").strip().rstrip("/")
+        # ROUND58 安全修复：工作流里的 api_base 不能把面板已保存的 Key 发到未配置地址。
+        # 只有节点同时显式提供了 api_key（用户明确要用该地址）时才采用自定义 Base；
+        # 否则忽略并记录告警（不静默改地址、也不外带密钥）。
+        if node_base and not key_explicit and node_base != panel_base:
+            warnings.append(
+                "⚠️ 已忽略工作流里的节点 API Base：它会与面板已保存的 API Key 一起发往"
+                "未配置地址（防止密钥外带）。请在右侧剧核面板配置 endpoint，或同时显式填写 Key。")
+            node_base = ""
+        base = node_base or panel_base
         configured = bool(key)
 
         # ---- 2) 项目 + 素材库（图一 A1/A1B/A2） ---------------------------
@@ -525,9 +638,52 @@ class BetterComfyUIEverything:
                     cfg.prompt.model_provider = "local_qwen"
                 else:
                     cfg.prompt.model_provider = "external_api"
-            template_key = SYSTEM_PROMPT_CHOICES.get(系统提示词选择, "default")
             custom = (自定义系统提示词 or "").strip()
-            cfg.prompt.system_prompt_template = custom or template_key
+            _follow_panel = str(系统提示词选择 or "").startswith("跟随面板配置")
+            # 跟随面板：保留 config/user.yaml 的面板提示词（含自定义全文）；
+            # 面板为空 → ROUND58 默认《H3 提示词工程精简版》全文（12,912 字），
+            # 既不是 2493 字要点摘要，也不再默认 41,966 字完整版。
+            cfg.prompt.system_prompt_template = resolve_template_choice(
+                系统提示词选择, custom,
+                str(getattr(cfg.prompt, "system_prompt_template", "") or ""))
+            _h3_meta: dict[str, Any] = {"follow_panel": _follow_panel}
+            try:
+                from bettercomfyui.prompt import h3_handbook as _h3hb
+                from bettercomfyui.prompt import h3_manual as _h3m
+
+                _handbook_mode = ""
+                _tpl = str(cfg.prompt.system_prompt_template or "").strip()
+                if not custom and _h3hb.is_handbook_preset(_tpl):
+                    _hb_key = _h3hb.canonical_preset(_tpl)
+                    _hb_text = _h3hb.resolve_preset(_hb_key) or ""
+                    if _hb_text:
+                        cfg.prompt.system_prompt_template = _hb_text
+                        _handbook_mode = _hb_key
+                        _h3_meta["handbook_mode"] = _handbook_mode
+                        _h3_meta["handbook_chars"] = len(_hb_text)
+                        _h3_meta["handbook_label"] = _h3hb.preset_label(_hb_key)
+                        _h3_meta["handbook_is_default"] = (
+                            _hb_key == _h3hb.DEFAULT_PRESET)
+                        warnings.append(
+                            "H3 提示词：已把{}全文（{} 字）作为系统提示词写入（不是要点摘要）".format(
+                                _h3hb.preset_label(_hb_key), len(_hb_text))
+                            + ("；这是 ROUND58 默认的精简版" if _h3_meta["handbook_is_default"]
+                               else "；这是历史版，仍可正常使用"))
+                    else:
+                        warnings.append(
+                            "⚠️ H3 提示词数据为空 → 未注入手册全文（请检查 {}）".format(
+                                _h3hb.preset_file(_hb_key, "data/h3_handbook_full.txt")))
+                if not _handbook_mode and bool(getattr(cfg.prompt, "h3_manual_enabled", True)):
+                    _app = _h3m.build_system_prompt_appendix()
+                    if _app:
+                        cfg.prompt.system_prompt_template += "\n\n" + _app
+                        _h3_meta["appendix_chars"] = len(_app)
+                if bool(getattr(cfg.prompt, "no_subtitle", True)):
+                    cfg.prompt.system_prompt_template += "\n\n" + _h3m.NO_SUBTITLE_SYSTEM_RULE
+                    _h3_meta["no_subtitle_system"] = True
+            except Exception as exc:  # noqa: BLE001 - 提示词增强失败不阻断一次 API 主流程
+                warnings.append(f"⚠️ H3 手册/禁字幕系统提示词注入失败（继续）："
+                                f"{type(exc).__name__}: {exc}")
             cfg.prompt.output_language = str(输出语言)
             cfg.prompt.story_granularity = str(分镜粒度)
             cfg.prompt.output_format = "auto"  # JSON 优先，失败自动按预设分隔符
@@ -545,10 +701,37 @@ class BetterComfyUIEverything:
             mode = f"真实模型（一次调用：{model_name}）"
             output_format_detected = str(result.meta.get("output_format_detected") or "")
             generate_meta = {k: v for k, v in result.meta.items() if k != "notes"}
+            # ROUND58：把解析/形状适配的 warnings 暴露给用户，避免"静默转换"。
+            for _note in (result.meta.get("notes") or []):
+                warnings.append(f"提示词解析：{_note}")
+            if str(result.meta.get("output_shape") or "") == "handbook":
+                warnings.append(
+                    "模型按 H3 手册结构（video_prompt/material_image_prompts）输出，"
+                    "已自动转换为标准剧本结构；建议系统提示词选择含【输出契约】的模板，"
+                    "或让模型按 chapters/assets 输出。")
             for _drop in (result.meta.get("dropped_invalid_refs") or []):
                 warnings.append(f"模型输出引用了不存在的素材，已丢弃该引用（不参与生成）：{_drop}")
 
         video_prompts = list(result.video_prompts)
+        _h3_meta = locals().get("_h3_meta") or {}
+        try:
+            from bettercomfyui.prompt import h3_manual as _h3m
+
+            _cfg_no_sub = True
+            try:
+                _cfg_r55 = _load_config()
+                _cfg_no_sub = bool(getattr(_cfg_r55.prompt, "no_subtitle", True))
+            except Exception:  # noqa: BLE001 - 配置读取失败按默认 True
+                pass
+            if _cfg_no_sub and video_prompts:
+                video_prompts = [_h3m.inject_no_subtitle_instruction(str(p))
+                                 for p in video_prompts]
+                _h3_meta["no_subtitle_prompts"] = len(video_prompts)
+                warnings.append(
+                    f"已对 {len(video_prompts)} 段视频提示词注入「禁止生成字幕/文字/水印」要求"
+                    "（系统提示词同步注入；保留剧本明确要求可见文字的双引号内容）")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"⚠️ 逐段禁字幕提示词注入失败（继续）：{type(exc).__name__}: {exc}")
         if not video_prompts:
             raise RuntimeError(
                 "剧本拆解没有产出任何视频段（模型输出了素材但没有 segments）。"
@@ -672,6 +855,7 @@ class BetterComfyUIEverything:
                     "skipped": library_stats.get("skipped", ""),
                 },
                 **generate_meta,
+                "h3_manual": _h3_meta,
             },
             "assets_by_type": result.assets_by_type,
             "video_prompts": video_prompts,

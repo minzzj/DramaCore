@@ -1,0 +1,543 @@
+{
+  "last_node_id": 11,
+  "last_link_id": 9,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "PrimitiveStringMultiline",
+      "pos": [
+        -1900,
+        -500
+      ],
+      "size": [
+        640,
+        900
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "【这是一套什么工作流（本机可跑，不需要 GPU）】\n\n作用：把**已经生成好的段视频**按顺序拼接、封装成最终成片，并自检：\n  · 完整性：成片时长 vs Σ段时长、计划段数核对、是否有音轨\n  · 剪辑性：黑帧 / 冻帧 / 静音段\n  · 质量：本地启发式评分（叙事流畅/音画同步/节奏合理/无明显跳变）\n  · 占位检测：码率/画面过低会明确标\"疑似占位，不是真实生成\"\n  · 然后把成片路径自动交给「视频审核」做段级 R_seg + 整片 R_full\n\n【普通用户三步】\n  1) 「成片剪辑 → 段视频路径列表」：每行填一个段视频绝对路径（按播放顺序）；只有一段就填一行；\n  2) 可选：填计划段数/每段时长，让完整性核对更严格；\n  3) 点「队列」。右边预览：成片路径 / 完整性JSON / 质量JSON / 剪辑审计 / 视频审核结论。\n\n【注意】\n  · 本工作流不做\"生成\"，只做\"剪辑+封装+审核\"；段视频要么来自 GPU 机器出片，要么是任意 mp4 测试文件；\n  · 转场特效未实现，不暴露、不静默忽略；\n  · 画质高低的最终判断需人工抽检，本工作流只给机器可算的证据。\n"
+      ],
+      "title": "📖 使用说明（先读我）"
+    },
+    {
+      "id": 2,
+      "type": "BetterComfyUIFinalize",
+      "pos": [
+        -1700,
+        520
+      ],
+      "size": [
+        540,
+        500
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "成片路径",
+          "type": "STRING",
+          "links": [
+            1,
+            2
+          ]
+        },
+        {
+          "name": "完整性JSON",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        },
+        {
+          "name": "质量JSON",
+          "type": "STRING",
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "审计报告",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "我的短剧",
+        "",
+        "",
+        18,
+        "完整扫描",
+        false,
+        30,
+        0,
+        0.0
+      ]
+    },
+    {
+      "id": 3,
+      "type": "BetterComfyUIVideoReview",
+      "pos": [
+        -1050,
+        520
+      ],
+      "size": [
+        560,
+        560
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "视频文件路径",
+          "type": "STRING",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "结论",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        },
+        {
+          "name": "段审核JSON",
+          "type": "STRING",
+          "links": [
+            7
+          ]
+        },
+        {
+          "name": "整片审核JSON",
+          "type": "STRING",
+          "links": [
+            8
+          ]
+        },
+        {
+          "name": "需重生成段",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "审计报告",
+          "type": "STRING",
+          "links": [
+            9
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "我的短剧",
+        "",
+        10.0,
+        "段级 + 整片（推荐）",
+        "本地启发式（真实计算）",
+        -1.0,
+        -1.0,
+        "按项目配置",
+        "",
+        false,
+        55.0
+      ]
+    },
+    {
+      "id": 4,
+      "type": "PreviewAny",
+      "pos": [
+        -380,
+        200
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 2
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "① 成片路径"
+    },
+    {
+      "id": 5,
+      "type": "PreviewAny",
+      "pos": [
+        -380,
+        500
+      ],
+      "size": [
+        560,
+        300
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "② 完整性JSON（时长/段数/黑帧/冻帧/静音/占位）"
+    },
+    {
+      "id": 6,
+      "type": "PreviewAny",
+      "pos": [
+        -380,
+        850
+      ],
+      "size": [
+        560,
+        260
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "③ 质量JSON（本地启发式四维）"
+    },
+    {
+      "id": 7,
+      "type": "PreviewAny",
+      "pos": [
+        -380,
+        1160
+      ],
+      "size": [
+        560,
+        340
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 5
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "④ 剪辑审计（人话版）"
+    },
+    {
+      "id": 8,
+      "type": "PreviewAny",
+      "pos": [
+        420,
+        520
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "⑤ 视频审核结论"
+    },
+    {
+      "id": 9,
+      "type": "PreviewAny",
+      "pos": [
+        420,
+        880
+      ],
+      "size": [
+        560,
+        300
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 7
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "⑥ 段审核JSON（R1a/CNT2/边界）"
+    },
+    {
+      "id": 10,
+      "type": "PreviewAny",
+      "pos": [
+        420,
+        1240
+      ],
+      "size": [
+        560,
+        320
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 8
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "⑦ 整片审核JSON（R_full/策略）"
+    },
+    {
+      "id": 11,
+      "type": "PreviewAny",
+      "pos": [
+        420,
+        1620
+      ],
+      "size": [
+        560,
+        320
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "STRING",
+          "type": "STRING",
+          "links": []
+        }
+      ],
+      "properties": {},
+      "widgets_values": [],
+      "title": "⑧ 视频审核审计（R_seg/R_full）"
+    }
+  ],
+  "links": [
+    [
+      1,
+      2,
+      0,
+      3,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      2,
+      0,
+      4,
+      0,
+      "STRING"
+    ],
+    [
+      3,
+      2,
+      1,
+      5,
+      0,
+      "STRING"
+    ],
+    [
+      4,
+      2,
+      2,
+      6,
+      0,
+      "STRING"
+    ],
+    [
+      5,
+      2,
+      3,
+      7,
+      0,
+      "STRING"
+    ],
+    [
+      6,
+      3,
+      0,
+      8,
+      0,
+      "STRING"
+    ],
+    [
+      7,
+      3,
+      1,
+      9,
+      0,
+      "STRING"
+    ],
+    [
+      8,
+      3,
+      2,
+      10,
+      0,
+      "STRING"
+    ],
+    [
+      9,
+      3,
+      4,
+      11,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 0,
+      "title": "📖 使用说明（先读）",
+      "bounding": [
+        -1940,
+        -540
+      ],
+      "color": "#8a8a8a",
+      "font_size": 22,
+      "flags": {}
+    },
+    {
+      "id": 1,
+      "title": "① 成片剪辑（拼接+封装+自检）",
+      "bounding": [
+        -1740,
+        460
+      ],
+      "color": "#8a5a2a",
+      "font_size": 22,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "② 视频审核（段级+整片）",
+      "bounding": [
+        -1090,
+        460
+      ],
+      "color": "#59a130",
+      "font_size": 22,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "③ 结果（看这里）",
+      "bounding": [
+        -420,
+        160
+      ],
+      "color": "#2f6f5f",
+      "font_size": 22,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

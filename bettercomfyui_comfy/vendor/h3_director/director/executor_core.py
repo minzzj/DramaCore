@@ -13,6 +13,10 @@ from ..lib.image_prep import assert_minimax_canvas, fit_canvas, fit_video_long_e
 from ..lib.task_modes import SUPPORTED_TASK_KEYS
 from ..nodes.conditioning import run_minimax_conditioning
 from .core_sampling import ShiftedModelCache, sample_single_stage
+from .spatial_tiled_sampling import (
+    describe_tiled_combinations,
+    resolve_tiled_request,
+)
 from .selflift.pack import (
     selflift_enabled,
     selflift_will_run,
@@ -424,6 +428,8 @@ def execute_director_plan_core(
     sigmas=None,
     shift_video: float = 12.0,
     shift_audio: float = 3.0,
+    tiled_n_tiles: int = 0,
+    tiled_overlap_pixels: int = 64,
     clear_vram_between_segments: bool = True,
     clear_vram_before_refine: bool = False,
     clear_vram_before_face_refine: bool = False,
@@ -539,6 +545,23 @@ def execute_director_plan_core(
         reports.append("Audio: source — skip audio VAE decode, use original timeline audio.")
     else:
         reports.append("Audio: generate — decode MiniMax H3 AV latent audio.")
+    # ── ROUND55：tiled 采样（空间分块）解析 ──────────────────────────────
+    # 默认 tiled_n_tiles=0 → resolve 返回 enabled=False，主采样器不被包装，
+    # report 明确写 off（旧版行为完全不变）。>1 时才在 main sample_single_stage
+    # 调用点传 enable_tiling/tile_count/tile_overlap。
+    tiled_request = resolve_tiled_request(tiled_n_tiles, tiled_overlap_pixels)
+    plan.tiled_enabled = bool(tiled_request["enabled"])
+    plan.tiled_n_tiles = int(tiled_request["n_tiles"])
+    plan.tiled_overlap_pixels = int(tiled_request["overlap_pixels"])
+    reports.append(str(tiled_request["report"]))
+    reports.extend(tiled_request["warnings"])
+    reports.extend(
+        describe_tiled_combinations(
+            tiled_request,
+            selflift=selflift_enabled(plan),
+            refine=isinstance(getattr(plan, "refine", None), dict) and bool(plan.refine),
+        )
+    )
     selected_ui = ext_meta.get("selected")
     if selected_ui is not None:
         selected_set = {int(x) for x in selected_ui}
@@ -604,6 +627,8 @@ def execute_director_plan_core(
     # completed_* also get export-fill hydrations from disk; this set does not.
     resampled_this_run: set[int] = set()
     held_for_confirmation = False
+    # ROUND55：tiled 采样与 SelfLift/一采缓存的组合说明只报一次，避免逐段刷屏。
+    tiled_notes_emitted: set[str] = set()
     # True export lengths (post continuity trim). Kept after「分段导出」
     # replaces older IMAGE slots with 1-frame posters.
     segment_export_lengths: dict[int, int] = {}
@@ -1212,6 +1237,11 @@ def execute_director_plan_core(
                 f"Segment {ui_idx + 1}/{timeline_seg_total}: 命中一采缓存 "
                 f"(seed={int(getattr(plan, 'sample_seed', seed) or seed)})，跳过一采，开始二采"
             )
+            if bool(getattr(plan, "tiled_enabled", False)) and "cache" not in tiled_notes_emitted:
+                tiled_notes_emitted.add("cache")
+                reports.append(
+                    "Tiled sampling: 本段命中一采缓存（无采样步骤），tiled 不参与；"
+                    "仅在真正执行的采样段生效。")
         elif selflift_will_run(plan, seg):
             samples, low_carry = sample_selflift_stage(
                 model=seg_model,
@@ -1248,6 +1278,11 @@ def execute_director_plan_core(
                 f"{sl.get('split_mode') or 'highres_steps'} "
                 f"carry={'on' if sl.get('native_low_carry', True) and use_motion_context else 'off'}"
             )
+            if bool(getattr(plan, "tiled_enabled", False)) and "selflift" not in tiled_notes_emitted:
+                tiled_notes_emitted.add("selflift")
+                reports.append(
+                    "⚠️ Tiled sampling: 本段走 SelfLift 分阶段采样器，空间分块未启用"
+                    "（tiled 只挂在主单阶段采样器；如需 tiled 请关闭 SelfLift）。")
         else:
             samples = sample_single_stage(
                 model=seg_model,
@@ -1267,6 +1302,11 @@ def execute_director_plan_core(
                 preview_every=1,
                 after_shift=after_shift,
                 shift_cache=shift_cache,
+                # ROUND55：tiled 空间分块（默认 0 → enable_tiling=False，
+                # sample_single_stage 完全不碰采样器，旧版行为不变）
+                enable_tiling=bool(getattr(plan, "tiled_enabled", False)),
+                tile_count=int(getattr(plan, "tiled_n_tiles", 0) or 0) or 2,
+                tile_overlap=int(getattr(plan, "tiled_overlap_pixels", 64) or 0),
             )
 
         first_pass_samples = samples

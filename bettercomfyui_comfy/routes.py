@@ -633,8 +633,47 @@ async def h_panel_config_get(request):  # noqa: ARG001 - aiohttp 签名固定
         return _error(f"{type(exc).__name__}: {exc}", status=500)
 
 
+def _request_is_loopback(request) -> bool:
+    remote = str(getattr(request, "remote", "") or "").strip()
+    if not remote:
+        return True  # 测试/fake request：没有远端信息时按本机处理
+    return remote.split("%")[0] in ("127.0.0.1", "::1", "localhost")
+
+
+def _panel_sensitive_guard(request):
+    """敏感面板接口的本机/同源保护（ROUND58 安全修复）。
+
+    ComfyUI 默认无登录；若按文档用 --listen 0.0.0.0，同网段任何人都能改
+    endpoint / api_key_env 或触发带密钥探测。这里：
+    - 只允许本机请求（可用 BETTERCOMFYUI_ALLOW_REMOTE_PANEL=1 显式放开，默认拒绝）；
+    - 有 Origin/Referer 时必须是同源，挡住恶意网页 CSRF。
+    """
+    import os
+    from urllib.parse import urlparse
+
+    if str(os.environ.get("BETTERCOMFYUI_ALLOW_REMOTE_PANEL") or "").lower() in ("1", "true", "yes"):
+        return None
+    if not _request_is_loopback(request):
+        return _json({
+            "ok": False,
+            "error": "为安全起见，面板配置/连接测试只允许本机访问；"
+                     "远程使用请通过带认证的反向代理，或显式设置 "
+                     "BETTERCOMFYUI_ALLOW_REMOTE_PANEL=1（不推荐）。",
+        }, status=403)
+    origin = str(request.headers.get("Origin") or request.headers.get("Referer") or "").strip()
+    if origin:
+        host = str(request.headers.get("Host") or "").strip()
+        netloc = urlparse(origin).netloc
+        if host and netloc and netloc != host:
+            return _json({"ok": False, "error": "跨站请求被拒绝（Origin/Host 不一致）"}, status=403)
+    return None
+
+
 async def h_panel_config_save(request):
     """POST `/bettercomfyui/panel/config` —— 保存面板全部配置。"""
+    denied = _panel_sensitive_guard(request)
+    if denied is not None:
+        return denied
     try:
         body = await request.json()
     except Exception as exc:  # noqa: BLE001
@@ -649,6 +688,13 @@ async def h_panel_config_save(request):
         "api_key", "model_name", "endpoint", "model_provider",
         "api_key_env", "output_format",
     )
+    env_name = str(body.get("api_key_env") or "").strip()
+    if env_name and env_name not in ("BETTERCOMFYUI_API_KEY", "DEEPSEEK_API_KEY"):
+        return _json({
+            "ok": False,
+            "error": "api_key_env 只允许 BETTERCOMFYUI_API_KEY / DEEPSEEK_API_KEY；"
+                     "不允许通过 HTTP 指定任意环境变量（防止外带进程环境变量）。",
+        }, status=400)
     api_payload = {key: body[key] for key in api_fields if key in body}
     if api_payload:
         try:
@@ -685,8 +731,9 @@ async def h_panel_config_save(request):
 
     if "system_prompt" in body:
         value = str(body.get("system_prompt") or "").strip()
-        if len(value) > 8000:
-            return _json({"ok": False, "error": "默认系统提示词过长（上限 8000 字符）"}, status=400)
+        # ROUND58：精简版 12,912 字 / 历史完整版 41,966 字都必须能整段保存；上限放宽到 200k。
+        if len(value) > 200_000:
+            return _json({"ok": False, "error": "默认系统提示词过长（上限 200000 字符）"}, status=400)
         prompt["system_prompt_template"] = value
         written.append("prompt.system_prompt_template")
         changed = True
@@ -738,6 +785,32 @@ async def h_panel_config_save(request):
     snapshot = _panel_snapshot()
     snapshot["saved"] = {"written": written, "path": "config/user.yaml"}
     return _json(snapshot)
+
+
+def _panel_configured_endpoint() -> str:
+    """返回面板/配置里已保存的 endpoint（用于判断"请求体里的 endpoint 是不是用户新填的"）。"""
+    try:
+        from . import api_settings as _api_settings  # noqa: PLC0415
+
+        snap = _api_settings.settings_snapshot()
+        endpoint = str(snap.get("endpoint") or "").strip()
+    except Exception:  # noqa: BLE001
+        endpoint = ""
+    return (endpoint or "https://api.deepseek.com").rstrip("/")
+
+
+def _panel_endpoint_blocked(endpoint: str) -> str:
+    """阻断云厂商元数据/明显内网元数据地址（SSRF 防护；本地 LLM 仍允许）。"""
+    try:
+        from urllib.parse import urlparse
+
+        host = (urlparse(endpoint).hostname or "").strip().lower()
+    except Exception:  # noqa: BLE001
+        return ""
+    if host in {"169.254.169.254", "metadata.google.internal",
+                "metadata", "100.100.100.200"}:
+        return f"出于安全考虑，不允许测试云元数据地址：{host}"
+    return ""
 
 
 def _panel_resolve_endpoint(payload: dict) -> str:
@@ -806,7 +879,8 @@ async def _panel_test_chat(session, endpoint: str, headers: dict, model: str, st
         "max_tokens": 1,
     }
     try:
-        async with session.post(url, headers=headers, json=payload) as resp:
+        async with session.post(url, headers=headers, json=payload,
+                                allow_redirects=False) as resp:
             latency = int((time.monotonic() - started) * 1000)
             text = await resp.text()
             if resp.status == 200:
@@ -833,6 +907,9 @@ async def h_panel_test_connection(request):
     为什么不在浏览器里直接请求第三方 API：会被 CORS 拦，用户看到"失败"会误判成
     密钥写错。服务端探测能给出**真实**的 HTTP 状态、延迟与模型数量。
     """
+    denied = _panel_sensitive_guard(request)
+    if denied is not None:
+        return denied
     import time  # noqa: PLC0415
 
     from aiohttp import ClientSession, ClientTimeout  # noqa: PLC0415
@@ -850,7 +927,27 @@ async def h_panel_test_connection(request):
             "ok": False, "endpoint": endpoint,
             "error": f"API Base 必须是 http(s) 地址，收到 {endpoint!r}",
         })
-    key, key_source = _panel_resolve_key(body)
+    blocked = _panel_endpoint_blocked(endpoint)
+    if blocked:
+        return _json({"ok": False, "endpoint": endpoint, "error": blocked}, status=400)
+
+    # ROUND58 安全修复：**绝不把已保存的 API Key 发送到请求体临时指定的 endpoint**。
+    # 只有 endpoint 与面板已配置的一致（或请求体显式自带 key）时才允许带密钥探测；
+    # 否则恶意页面/同网段请求可把 /panel/test 当 SSRF + 凭据外带通道。
+    body_endpoint = str(body.get("endpoint") or "").strip().rstrip("/")
+    configured_endpoint = _panel_configured_endpoint()
+    custom_endpoint = bool(body_endpoint and body_endpoint != configured_endpoint)
+    if custom_endpoint:
+        key = str(body.get("api_key") or "").strip()
+        key_source = "request" if key else "blocked"
+        if not key:
+            return _json({
+                "ok": False, "endpoint": endpoint, "key_source": key_source,
+                "error": "测试未配置过的自定义 API Base 时必须显式填写 API Key；"
+                         "为防密钥外带，服务端不会把已保存的 Key 发送到该地址。",
+            }, status=400)
+    else:
+        key, key_source = _panel_resolve_key(body)
     model = _panel_resolve_model(body)
     if not key:
         return _json({
@@ -868,7 +965,8 @@ async def h_panel_test_connection(request):
     try:
         timeout = ClientTimeout(total=20)
         async with ClientSession(timeout=timeout) as session:
-            async with session.get(url_models, headers=headers) as resp:
+            async with session.get(url_models, headers=headers,
+                                   allow_redirects=False) as resp:
                 latency = int((time.monotonic() - started) * 1000)
                 text = await resp.text()
                 if resp.status == 200:
@@ -1201,6 +1299,173 @@ async def h_asset_preview(request):
 
 
 
+
+# ---------------------------------------------------------------------------
+# ROUND55：素材版本回滚（list / apply）—— 后端逻辑在 bettercomfyui.store.rollback
+# 契约：docs/ROUND55_版本回滚接口契约.md；前端 UI 调 /bettercomfyui/rollback/*
+# ---------------------------------------------------------------------------
+
+
+def _rollback_error(exc: Exception) -> tuple[dict, int]:
+    """把 rollback 模块异常映射成 (json_body, http_status)。"""
+    code = str(getattr(exc, "rollback_code", "") or "")
+    mapping = {
+        "TARGET_VERSION_NOT_FOUND": 404,
+        "ASSET_NOT_FOUND": 404,
+        "PROJECT_NOT_FOUND": 404,
+        "CONTENT_HASH_MISMATCH": 422,
+        "TARGET_FILE_MISSING": 422,
+        "TARGET_VERSION_NOT_LOCKED": 409,
+        "LOCK_RECORD_INCONSISTENT": 409,
+        "AMBIGUOUS_ASSET": 409,
+        "POSTCONDITION_FAILED": 409,
+        "INVALID_ARGUMENT": 400,
+        "IO_ERROR": 500,
+    }
+    status = mapping.get(code, 500)
+    return {
+        "ok": False,
+        "code": code or type(exc).__name__,
+        "error": f"{type(exc).__name__}: {exc}",
+        "context": dict(getattr(exc, "context", {}) or {}),
+    }, status
+
+
+
+def _resolve_rollback_project(project_id_or_name: str) -> str:
+    """UI「项目显示名或 project_id」→ 32 位 project_id（找不到原样返回，由模块报错）。"""
+    s = str(project_id_or_name or "").strip()
+    if not s:
+        return s
+    if PROJECT_ID_RE.match(s.lower()):
+        return s.lower()
+    try:
+        root = _panel_projects_root()
+        if root.is_dir():
+            target = s.casefold()
+            for child in root.iterdir():
+                if not child.is_dir():
+                    continue
+                meta_path = child / "project.json"
+                if not meta_path.is_file():
+                    continue
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                except Exception:  # noqa: BLE001
+                    continue
+                if str(meta.get("display_name") or "").strip().casefold() == target:
+                    return child.name.lower()
+    except Exception:  # noqa: BLE001
+        pass
+    return s
+
+
+async def h_rollback_list(request):  # noqa: ARG001 - aiohttp 签名固定
+    """GET /bettercomfyui/rollback/list?project_id=&asset= —— 素材版本历史。"""
+    project_id = _resolve_rollback_project(str(request.query.get("project_id") or "").strip())
+    asset = str(request.query.get("asset") or "").strip()
+    if not project_id:
+        return _json({"ok": False, "code": "INVALID_ARGUMENT",
+                      "error": "project_id 必填"}, status=400)
+    try:
+        from bettercomfyui.store.rollback import list_asset_versions
+
+        versions = list_asset_versions(project_id, asset or None)
+        return _json({"ok": True, "project_id": project_id,
+                      "asset": asset or None, "versions": versions})
+    except Exception as exc:  # noqa: BLE001 - 统一转 JSON 错误
+        body, status = _rollback_error(exc)
+        logger.warning("回滚版本列表失败：%s", traceback.format_exc())
+        return _json(body, status=status)
+
+
+async def h_rollback_apply(request):
+    """POST /bettercomfyui/rollback/apply —— 回滚到目标版本（哈希门禁+审计）。"""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+    if not isinstance(payload, dict):
+        return _json({"ok": False, "code": "INVALID_ARGUMENT",
+                      "error": "请求体必须是 JSON 对象"}, status=400)
+    project_id = _resolve_rollback_project(str(payload.get("project_id") or "").strip())
+    asset = str(payload.get("asset") or "").strip()
+    target = str(payload.get("target_version") or payload.get("version") or "").strip()
+    if not (project_id and asset and target):
+        return _json({"ok": False, "code": "INVALID_ARGUMENT",
+                      "error": "project_id / asset / target_version 必填"}, status=400)
+    try:
+        from bettercomfyui.store.rollback import rollback_asset
+
+        result = rollback_asset(
+            project_id, asset, target,
+            operator=str(payload.get("operator") or "panel"),
+            reason=str(payload.get("reason") or "面板手动回滚"),
+            require_hash_ok=bool(payload.get("require_hash_ok", True)),
+            revalidate_lock=bool(payload.get("revalidate_lock", True)),
+            lock_source=str(payload.get("lock_source") or "HUMAN_PASS"),
+            review_cycle_id=(str(payload.get("review_cycle_id"))
+                             if payload.get("review_cycle_id") else None),
+        )
+        return _json(result)
+    except Exception as exc:  # noqa: BLE001
+        body, status = _rollback_error(exc)
+        logger.warning("版本回滚失败：%s", traceback.format_exc())
+        return _json(body, status=status)
+
+
+
+# ---------------------------------------------------------------------------
+# ROUND56：H3 提示词手册全文（UI「提示词」面板加载/查看）
+# ---------------------------------------------------------------------------
+
+
+async def h_prompt_handbook(request):  # noqa: ARG001 - aiohttp 签名固定
+    """GET /bettercomfyui/prompt/handbook?mode=concise|full|core|... —— 返回预设全文。
+
+    ROUND58：默认 ``h3_concise_v1``（12,912 字精简版）；``h3_handbook`` 41,966 字历史完整版
+    与 ``h3_core`` 旧核心章节仍可选；别名统一由 h3_handbook.canonical_preset 收口。
+    """
+    mode = str(request.query.get("mode") or "concise").strip()
+    normalized = mode.strip().lower()
+    try:
+        from bettercomfyui.prompt import h3_handbook
+
+        key = h3_handbook.canonical_preset(normalized) or h3_handbook.DEFAULT_PRESET
+        text = h3_handbook.resolve_preset(key) or ""
+        return _json({"ok": True, "mode": mode, "key": key, "label": h3_handbook.PRESET_LABELS.get(key, ""),
+                      "chars": len(text), "text": text})
+    except Exception as exc:  # noqa: BLE001 - 手册读取失败给清晰 JSON 错误
+        logger.warning("读取 H3 手册失败：%s", traceback.format_exc())
+        return _json({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status=500)
+
+
+# ---------------------------------------------------------------------------
+# ROUND57：硬件适配（检测报告 + 昇腾运行时补丁状态 + 中文报告）
+# ---------------------------------------------------------------------------
+
+
+async def h_hardware(request):
+    """GET /bettercomfyui/hardware?refresh=1 —— 硬件报告/补丁状态/中文报告。
+
+    实际逻辑在 `hardware_adapt.route_payload()`：路由只负责取参和兜异常。
+    `refresh=1` 强制重新探测（用户换卡/装完驱动后不用重启 ComfyUI）。
+    """
+    force = str(request.query.get("refresh") or "").strip().lower() in (
+        "1", "true", "yes", "on")
+    try:
+        mod = _mod("hardware_adapt")
+        return _json(mod.route_payload(force=force))
+    except Exception as exc:  # noqa: BLE001 - 探测失败也要给 JSON，不能 500 白屏
+        logger.warning("硬件适配报告失败：%s", traceback.format_exc())
+        return _json(
+            {"ok": False, "available": False,
+             "error": f"{type(exc).__name__}: {exc}",
+             "notice": "硬件适配模块不可用；可运行 `python -m bettercomfyui.hardware doctor` 排查。"},
+            status=500,
+        )
+
+
 # ---------------------------------------------------------------------------
 # 注册
 # ---------------------------------------------------------------------------
@@ -1247,6 +1512,7 @@ def register_routes() -> bool:
         add_post = app.router.add_post
 
         _both(add_get, "/doctor", h_doctor)
+        _both(add_get, "/hardware", h_hardware)
         _both(add_get, "/projects", h_projects)
         # API 配置（DeepSeek / 千问 / 自配接口）：用户能在这里填密钥。
         # 读接口**只回遮罩后的密钥**；写接口只接受白名单字段。
@@ -1261,6 +1527,10 @@ def register_routes() -> bool:
         _both(add_get, "/projects/list", h_projects_list)
         _both(add_get, "/project/context", h_project_context)
         _both(add_get, "/asset/preview", h_asset_preview)
+        # ROUND55：素材版本回滚入口（列表 / 应用）
+        _both(add_get, "/prompt/handbook", h_prompt_handbook)
+        _both(add_get, "/rollback/list", h_rollback_list)
+        _both(add_post, "/rollback/apply", h_rollback_apply)
         # 剧核 / DramaCore 面板配置：全部配置的读写 + 连接测试
         _both(add_get, "/panel/config", h_panel_config_get)
         _both(add_post, "/panel/config", h_panel_config_save)

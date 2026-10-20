@@ -80,6 +80,7 @@ const CSS = `
 .dcdu-btn.green { background:#1f6b36; border-color:#1f6b36; color:#eafff0; }
 .dcdu-btn.danger { background:#5a2020; border-color:#5a2020; color:#ffd9d9; }
 .dcdu-btn.tiny { padding:1px 6px; font-size:10px; }
+.dcdu-btn.on { background:#1f6b36; border-color:#2e7d32; color:#eafff0; font-weight:700; }
 
 /* 开关 / 档位 chips */
 .dcdu-switch { display:inline-flex; align-items:center; gap:6px; cursor:pointer; user-select:none; }
@@ -664,6 +665,413 @@ class DirectorCardUI {
     try { this.node.setDirtyCanvas(true, true); } catch (e) { /* ignore */ }
   }
 
+  // ---- ROUND56：多段剧本动态列表 ------------------------------------
+  readMultiChapters() {
+    const raw = String(readVal(this.node, "多段剧本列表JSON", "") || "").trim();
+    if (raw) {
+      try {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) return arr.length ? arr.map((x) => String(x == null ? "" : x)) : [""];
+      } catch (e) { /* 退回旧文本 */ }
+    }
+    const legacy = String(readVal(this.node, "多段剧本", "") || "");
+    if (!legacy.trim()) return [""];
+    const sep = String(readVal(this.node, "多段剧本分隔符", "---") || "---");
+    const parts = [];
+    let cur = [];
+    legacy.split(/\r?\n/).forEach((line) => {
+      if (line.trim() === sep) { parts.push(cur.join("\n")); cur = []; }
+      else cur.push(line);
+    });
+    parts.push(cur.join("\n"));
+    const cleaned = parts.map((s) => String(s || "").trim()).filter(Boolean);
+    return cleaned.length ? cleaned : [""];
+  }
+
+  syncMultiChapters(list) {
+    // 保留空段（用户点「添加一段」后必须立即可见第二段；空段在运行前会被过滤）
+    const all = (Array.isArray(list) && list.length) ? list.map((s) => String(s || "")) : [""];
+    const valid = all.filter((s) => s.trim().length > 0);
+    writeVal(this.node, "多段剧本列表JSON", JSON.stringify(all));
+    // 兼容旧文本参数（后端仍支持；JSON 优先）
+    const sep = String(readVal(this.node, "多段剧本分隔符", "---") || "---");
+    writeVal(this.node, "多段剧本", valid.join("\n" + sep + "\n"));
+    if (this.multiCountEl) {
+      this.multiCountEl.textContent = tr(
+        `已添加 ${all.length} 段 · 有效 ${valid.length} 段 · 预计 ${valid.length} 次 API`
+          + (all.length > 64 ? "（⚠️ 超过上限 64：运行时只取前 64 段）" : ""),
+        `${all.length} items · ${valid.length} valid · ~${valid.length} API calls`
+          + (all.length > 64 ? " (over 64: only first 64 run)" : ""));
+    }
+    if (this.updateScriptCount) this.updateScriptCount();
+    if (this.refreshNextStep) this.refreshNextStep();
+  }
+
+  renderMultiChapters() {
+    const box = this.multiChaptersEl;
+    if (!box) return;
+    const list = this.readMultiChapters();
+    box.innerHTML = "";
+    list.forEach((text, idx) => {
+      const ta = document.createElement("textarea");
+      ta.className = "dcdu-textarea dcdu-multi-script";
+      ta.value = text;
+      ta.placeholder = tr(`第 ${idx + 1} 段剧本…（每段会单独生成并顺序拼接）`,
+                          `Segment ${idx + 1} script… (generated separately, concatenated in order)`);
+      ta.addEventListener("input", () => {
+        const cur = this.readMultiChapters();
+        cur[idx] = ta.value;
+        this.syncMultiChapters(cur);
+      });
+      box.appendChild(h("div", { class: "dcdu-multi-item" }, [
+        h("div", { class: "dcdu-row" }, [
+          h("span", { class: "dcdu-chip", text: tr(`第 ${idx + 1} 段`, `Segment ${idx + 1}`) }),
+          button(tr("上移", "Up"), () => this.moveMultiChapter(idx, -1), "tiny"),
+          button(tr("下移", "Down"), () => this.moveMultiChapter(idx, 1), "tiny"),
+          button(tr("删除", "Delete"), () => this.removeMultiChapter(idx), "danger tiny"),
+        ]),
+        ta,
+      ]));
+    });
+    if (this.multiCountEl) {
+      const valid = list.filter((s) => String(s || "").trim().length > 0).length;
+      this.multiCountEl.textContent = tr(
+        `已添加 ${list.length} 段 · 有效 ${valid} 段 · 预计 ${valid} 次 API`
+          + (list.length > 64 ? "（⚠️ 超过上限 64：运行时只取前 64 段）" : ""),
+        `${list.length} items · ${valid} valid · ~${valid} API calls`
+          + (list.length > 64 ? " (over 64: only first 64 run)" : ""));
+    }
+  }
+
+  addMultiChapter() {
+    const list = this.readMultiChapters();
+    list.push("");
+    this.syncMultiChapters(list);
+    this.renderMultiChapters();
+    // 强制显示列表（即使用户没勾选多段开关）
+    if (this.multiToggleEl && !this.multiToggleEl.checked) {
+      this.multiToggleEl.checked = true;
+      this.multiToggleEl.dispatchEvent(new Event("change"));
+    }
+    if (this.multiBodyEl) this.multiBodyEl.style.display = "block";
+    try { this.multiChaptersEl.scrollIntoView({ block: "nearest" }); } catch (e) {}
+  }
+
+  removeMultiChapter(idx) {
+    const list = this.readMultiChapters();
+    list.splice(idx, 1);
+    if (!list.length) list.push("");
+    this.syncMultiChapters(list);
+    this.renderMultiChapters();
+  }
+
+  moveMultiChapter(idx, delta) {
+    const list = this.readMultiChapters();
+    const j = idx + delta;
+    if (j < 0 || j >= list.length) return;
+    const tmp = list[idx];
+    list[idx] = list[j];
+    list[j] = tmp;
+    this.syncMultiChapters(list);
+    this.renderMultiChapters();
+  }
+
+  // ---- ROUND56：提示词查看 / 编辑（高级项，默认只读，手动解锁） --------
+  // ---- ROUND58：默认加载《MiniMax H3 提示词工程精简版》V1.0（2026-10，12,890 字）；
+  //      旧完整手册（41,966 字）与旧核心章节保留为可选项（旧版不删）。
+  _handbookModeSpec(mode) {
+    const specs = {
+      concise: {
+        label: tr("H3 提示词精简版 V1.0（2026-10，12,890 字）",
+                  "H3 concise handbook V1.0 (2026-10, 12,890 chars)"),
+        aliases: ["concise", "h3_concise_v1", "concise_v1", "精简版"],
+        key: "h3_concise_v1",
+        file: "bettercomfyui/prompt/data/h3_concise_v1.txt",
+      },
+      full: {
+        label: tr("H3 手册完整版（历史版，41,966 字）", "H3 full handbook (legacy)"),
+        aliases: ["full"],
+        key: "h3_handbook",
+        file: "bettercomfyui/prompt/data/h3_handbook_full.txt",
+      },
+      core: {
+        label: tr("H3 手册核心章节（旧精简）", "H3 core handbook (legacy)"),
+        aliases: ["core"],
+        key: "h3_core",
+        file: "bettercomfyui/prompt/data/h3_handbook_full.txt",
+      },
+    };
+    return specs[mode] || specs.concise;
+  }
+
+  /** 面板里存的键/标签 → 手册预设模式；不是手册预设返回 ""。 */
+  _presetModeOf(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const table = {
+      h3_concise_v1: "concise", h3_concise: "concise", concise: "concise", "精简版": "concise",
+      "H3 提示词精简版（2026-10，推荐）": "concise",
+      h3_handbook: "full", "H3 手册（完整，历史版）": "full", "H3 手册（完整，推荐）": "full",
+      h3_core: "core", "H3 手册（精简）": "core",
+    };
+    return table[text] || "";
+  }
+
+  _isBuiltinPresetKey(value) {
+    return ["default", "strict_json", "chinese_drama", "shot_by_shot", "local_qwen"]
+      .includes(String(value || "").trim());
+  }
+
+  setPromptSource(text) {
+    if (this.promptSourceEl) this.promptSourceEl.textContent = String(text || "");
+  }
+
+  buildPromptsPanel() {
+    const panel = h("div", { class: "dcdu-panel" });
+    panel.appendChild(h("div", { class: "dcdu-title" }, [
+      h("span", { text: tr("当前生效的系统提示词（默认：H3 提示词精简版 V1.0 · 2026-10 · 12,890 字）",
+                            "Active system prompt (default: H3 concise handbook V1.0 · 2026-10)") }),
+      button(tr("加载 H3 精简版（推荐）", "Load concise (recommended)"),
+             () => this.loadHandbookPrompt("concise"), "green tiny"),
+      button(tr("加载历史完整版", "Load legacy full"),
+             () => this.loadHandbookPrompt("full"), "tiny"),
+      button(tr("加载核心章节", "Load core"), () => this.loadHandbookPrompt("core"), "tiny"),
+    ]));
+    this.promptSystemEl = h("textarea", {
+      class: "dcdu-textarea", style: "min-height:160px;",
+      readonly: "readonly", spellcheck: "false",
+    });
+    this.promptSystemEl.addEventListener("input", () => { this.promptSystemDirty = true; });
+    panel.appendChild(this.promptSystemEl);
+    this.promptSourceEl = h("div", { class: "dcdu-note", text: tr(
+      "尚未加载系统提示词", "System prompt not loaded yet") });
+    panel.appendChild(this.promptSourceEl);
+    panel.appendChild(h("div", { class: "dcdu-row" }, [
+      button(tr("✋ 手动编辑（高级）", "Unlock edit (advanced)"), () => {
+        const ok = window.confirm(tr(
+          "系统提示词是高级参数：默认已使用 H3 提示词精简版 V1.0（2026-10，12,890 字）。\n"
+            + "手动修改会影响所有生成，确认解锁编辑吗？",
+          "System prompt is advanced; the default is the H3 concise handbook (2026-10).\nUnlock editing?"));
+        if (!ok) return;
+        this.promptSystemEl.removeAttribute("readonly");
+        this.promptSystemEl.focus();
+      }, "tiny"),
+      button(tr("保存为面板默认", "Save as default"), () => this.savePromptSystem(), "green tiny"),
+      button(tr("复制", "Copy"), () => {
+        try { navigator.clipboard.writeText(this.promptSystemEl.value || ""); } catch (e) { /* ignore */ }
+      }, "tiny"),
+    ]));
+    panel.appendChild(h("div", { class: "dcdu-note", text: tr(
+      "默认：H3 提示词精简版 V1.0（2026-10）全文作为系统提示词（不是要点摘要，也不是旧完整版）；"
+      + "「加载历史完整版」可切回 41,966 字旧手册，「加载核心章节」是旧精简版。"
+      + "保存：载入的是预置 → 存预设键（如 h3_concise_v1，文档更新后自动跟随）；"
+      + "手动改过 → 存你改的全文（服务端上限 8000 字符）。均写入面板默认（config/user.yaml），下次运行生效。",
+      "Default: full H3 concise handbook V1.0 (2026-10) as the system prompt. "
+      + "Saving a preset stores its key (e.g. h3_concise_v1); manual edits store your text "
+      + "(server limit 8000 chars). Writes panel default (config/user.yaml), effective next run.") }));
+    panel.appendChild(h("div", { class: "dcdu-title", style: "margin-top:8px;" }, [
+      h("span", { text: tr("运行后 · 逐段视频提示词（只读）", "Generated per-segment prompts (read-only)") }),
+    ]));
+    this.promptSegmentsEl = h("div", { class: "dcdu-note", text: tr(
+      "运行一次后自动显示每段实际提示词（便于核对 H3 精简版规则/字幕禁用是否生效）",
+      "After a run, per-segment prompts appear here for verification.") });
+    panel.appendChild(this.promptSegmentsEl);
+    return panel;
+  }
+
+  async loadHandbookPrompt(mode = "concise", opts = {}) {
+    if (!this.promptSystemEl) return null;
+    const spec = this._handbookModeSpec(mode);
+    this.promptSystemEl.dataset.loadMode = mode;
+    this.promptSystemEl.value = tr("加载中…", "Loading…");
+    this.setPromptSource(tr(`加载中：${spec.label}…`, `Loading ${spec.label}…`));
+    let hit = null;
+    let fallback = null;
+    let lastError = null;
+    for (const alias of spec.aliases) {
+      try {
+        const data = await this.apiGet(
+          `/bettercomfyui/prompt/handbook?mode=${encodeURIComponent(alias)}`);
+        const text = String(data.text || "");
+        const key = String(data.key || "");
+        if (!text) continue;
+        if (!spec.key || key === spec.key) { hit = { text, key, alias }; break; }
+        if (!fallback) fallback = { text, key, alias };
+        else if (fallback.key === key) break;  // 后面的别名返回同一个预设，不必再问
+      } catch (err) {
+        lastError = err;
+      }
+    }
+    const got = hit || fallback;
+    if (!got) {
+      this.promptSystemEl.value = tr(
+        `加载失败：${lastError ? lastError.message : "手册数据为空"}`,
+        `Load failed: ${lastError ? lastError.message : "handbook empty"}`);
+      this.promptSystemEl.removeAttribute("readonly");
+      this.setPromptSource(tr(
+        `未取到手册：检查 ${spec.file} 与 /bettercomfyui/prompt/handbook 路由`,
+        `No handbook: check ${spec.file} and the /bettercomfyui/prompt/handbook route`));
+      return null;
+    }
+    const chars = got.text.length;
+    this.promptSystemEl.value = got.text;
+    this.promptSystemEl.setAttribute("readonly", "readonly");
+    this.promptSystemEl.dataset.presetKey = got.key || "";
+    this.promptSystemEl.dataset.loadMode = hit ? mode : (got.key === "h3_handbook" ? "full" : mode);
+    this.promptSystemDirty = false;
+    if (hit) {
+      this.setPromptSource(tr(
+        `来源：${spec.label} · ${chars.toLocaleString()} 字 · key=${got.key} · 文件 ${spec.file}`
+          + (opts.fromPanel ? " · 面板默认" : ""),
+        `Source: ${spec.label} · ${chars} chars · key=${got.key} · ${spec.file}`
+          + (opts.fromPanel ? " · panel default" : "")));
+    } else {
+      // 服务端路由还没把该 mode 映射到对应预设（例如 routes.py 尚未支持 mode=concise）：
+      // 如实说明拿到的是哪个预设，不冒充精简版。
+      this.setPromptSource(tr(
+        `⚠️ 实际取到 ${got.key}（${chars.toLocaleString()} 字），不是 ${spec.label}：`
+          + `需服务端路由把 mode=${spec.aliases[0]} 映射到预设 ${spec.key}（数据文件 ${spec.file}）`,
+        `⚠️ Server returned ${got.key} (${chars} chars), not ${spec.label}; `
+          + `map mode=${spec.aliases[0]} to preset ${spec.key} (${spec.file})`));
+    }
+    return got.text;
+  }
+
+  async loadPromptPanel() {
+    if (!this.promptSystemEl) return;
+    try {
+      const data = await this.apiGet("/bettercomfyui/panel/config");
+      const defaults = (data && data.defaults) || {};
+      const sp = String(defaults.system_prompt || data.system_prompt || "").trim();
+      if (sp) {
+        const mode = this._presetModeOf(sp);
+        if (mode) {
+          // 面板存的是手册预设（键或旧标签）→ 直接展示解析后的全文
+          await this.loadHandbookPrompt(mode, { fromPanel: true });
+          this.promptSystemEl.dataset.source = "panel-preset";
+          return;
+        }
+        if (this._isBuiltinPresetKey(sp)) {
+          this.promptSystemEl.value = sp;
+          this.promptSystemEl.setAttribute("readonly", "readonly");
+          this.promptSystemEl.dataset.loadMode = "preset-key";
+          this.promptSystemEl.dataset.presetKey = sp;
+          this.promptSystemDirty = false;
+          this.setPromptSource(tr(
+            `面板默认=内置预设 "${sp}"（不是 H3 手册全文；可用上方按钮加载精简版/完整版）`,
+            `Panel default preset "${sp}" (not the handbook text)`));
+          return;
+        }
+        this.promptSystemEl.value = sp;
+        this.promptSystemEl.setAttribute("readonly", "readonly");
+        this.promptSystemEl.dataset.loadMode = "custom";
+        this.promptSystemEl.dataset.source = "panel";
+        this.promptSystemDirty = false;
+        this.setPromptSource(tr(
+          `面板默认=自定义系统提示词（${sp.length.toLocaleString()} 字，保存在 config/user.yaml）`,
+          `Panel default = custom system prompt (${sp.length} chars, config/user.yaml)`));
+        return;
+      }
+      // 面板没保存过默认提示词 → ROUND58 默认：加载 H3 提示词精简版全文（12,890 字）
+      await this.loadHandbookPrompt("concise");
+    } catch (err) {
+      await this.loadHandbookPrompt("concise").catch(() => {});
+    }
+  }
+
+  async savePromptSystem() {
+    const el = this.promptSystemEl;
+    const raw = String(el?.value || "");
+    if (!raw.trim()) { alert(tr("提示词为空，未保存", "Empty prompt; not saved")); return; }
+    const mode = String(el?.dataset.loadMode || "");
+    const presetKey = String(el?.dataset.presetKey || "");
+    const isPreset = !!presetKey && !this.promptSystemDirty
+      && ["concise", "full", "core", "preset-key"].includes(mode);
+    if (isPreset) {
+      try {
+        await this.apiPost("/bettercomfyui/panel/config", { system_prompt: presetKey });
+        el.setAttribute("readonly", "readonly");
+        el.dataset.source = "panel-preset";
+        this.setPromptSource(tr(
+          `已保存为面板默认：预设 ${presetKey}（文档更新后自动跟随，下次运行生效）`,
+          `Saved panel default preset ${presetKey} (effective next run)`));
+        alert(tr(
+          `已保存为面板默认系统提示词：预设 ${presetKey}\n`
+            + "（存的是预设键而不是 1 万多字全文：文档更新后自动跟随，也避开 8000 字符保存上限）",
+          `Saved preset ${presetKey} as panel default`));
+      } catch (err) {
+        alert(tr(`保存失败：${err.message}`, `Save failed: ${err.message}`));
+      }
+      return;
+    }
+    if (raw.length > 8000) {
+      alert(tr(
+        `面板保存自定义系统提示词有 8000 字符上限（当前 ${raw.length} 字）。\n`
+          + "请改用上方预置按钮（载入后直接保存 = 存预设键），或精简后再保存。",
+        `Custom system prompt is limited to 8000 chars (now ${raw.length}); use a preset.`));
+      return;
+    }
+    try {
+      await this.apiPost("/bettercomfyui/panel/config", { system_prompt: raw });
+      el.setAttribute("readonly", "readonly");
+      el.dataset.source = "panel";
+      this.promptSystemDirty = false;
+      this.setPromptSource(tr(
+        `已保存为面板默认：自定义系统提示词（${raw.length.toLocaleString()} 字，下次运行生效）`,
+        `Saved custom system prompt (${raw.length} chars, effective next run)`));
+      alert(tr("已保存为面板默认系统提示词（下次运行生效）",
+               "Saved as panel default system prompt (effective next run)"));
+    } catch (err) {
+      alert(tr(`保存失败：${err.message}`, `Save failed: ${err.message}`));
+    }
+  }
+
+  renderPromptSegments() {
+    if (!this.promptSegmentsEl) return;
+    const report = this.lastReport || {};
+    const prompts = Array.isArray(report.video_prompts) ? report.video_prompts
+      : (Array.isArray(report.prompts?.segments) ? report.prompts.segments : []);
+    if (!prompts.length) {
+      this.promptSegmentsEl.textContent = tr(
+        "运行一次后自动显示每段实际提示词（便于核对 H3 精简版规则/字幕禁用是否生效）",
+        "After a run, per-segment prompts appear here for verification.");
+      return;
+    }
+    this.promptSegmentsEl.innerHTML = "";
+    prompts.slice(0, 60).forEach((text, idx) => {
+      this.promptSegmentsEl.appendChild(h("div", {
+        class: "dcdu-note",
+        text: `#${idx + 1} ${String(text || "").slice(0, 600)}`,
+      }));
+    });
+  }
+
+  // ---- ROUND56：转场决策（默认程序自动决定，逐处可见） ----------------
+  renderTransitionDecision() {
+    const el = this.transitionDecisionEl;
+    if (!el) return;
+    const report = this.lastReport || {};
+    const d = (report && report.transition_decision) || {};
+    const cuts = Array.isArray(d.cuts) ? d.cuts : [];
+    if (!cuts.length) {
+      el.textContent = tr(
+        "转场决策：默认「AI自动（按剧情）」——运行后这里显示每处接缝：第 N→N+1 段、转场类型/时长/原因。",
+        "Transition decisions: AI auto by default — after a run this shows each cut type/duration/reason.");
+      return;
+    }
+    el.innerHTML = "";
+    el.appendChild(h("div", { class: "dcdu-chip on", text: tr(
+      `转场决策：${d.cut_count != null ? d.cut_count : cuts.length} 处接缝 · 自动=${d.auto ? "开" : "关"} · ${d.rules_version || ""}`,
+      `Transitions: ${d.cut_count != null ? d.cut_count : cuts.length} cuts · auto=${d.auto ? "on" : "off"}`) }));
+    cuts.forEach((c) => {
+      const i = Number(c.cut_index || 0);
+      const label = `${c.transition || "无"}${c.duration ? ` ${c.duration}s` : ""}`;
+      el.appendChild(h("div", { class: "dcdu-note", text:
+        tr(`接缝 ${i + 1}→${i + 2}：${label} — ${c.reason || ""}`,
+           `cut ${i + 1}→${i + 2}: ${label} — ${c.reason || ""}`) }));
+    });
+  }
+
   // ---- 顶部（品牌 + 状态）----------------------------------------------
   buildHead() {
     const taskVal = String(readVal(this.node, "任务类型", ""));
@@ -672,13 +1080,15 @@ class DirectorCardUI {
     this.taskChip = h("span", { class: "dcdu-chip on", text: `任务 ${taskVal.split(" ")[0] || "?"}` });
     const contChip = h("span", { class: "dcdu-chip" });
     this.headContChip = contChip;
+    this.hardwareChip = h("span", { class: "dcdu-chip", text: "硬件检测中…" });
     return h("div", { class: "dcdu-head" }, [
       h("span", { class: "dcdu-brand", text: "剧核 · DramaCore" }),
-      h("span", { class: "dcdu-tag", text: "UI 2026-10-18b" }),
-      h("span", { class: "dcdu-sub", text: "单节点导演台 · UI 移植自 MiniMaxH3 Director（素材库 / canvas 时间轴 / 22 帧连续）" }),
+      h("span", { class: "dcdu-tag", text: "UI 2026-10-20-R58" }),
+      h("span", { class: "dcdu-sub", text: "单节点导演台 · 多品牌硬件适配（NVIDIA/AMD/Intel/Apple/昇腾）" }),
       h("span", { class: "dcdu-spacer" }),
       this.taskChip,
       contChip,
+      this.hardwareChip,
       statusChips,
     ]);
   }
@@ -855,6 +1265,8 @@ class DirectorCardUI {
       field("图像分辨率", numberInput(node, "图像分辨率")),
       field("图像步数", numberInput(node, "图像步数")),
       field("图像 CFG", numberInput(node, "图像CFG")),
+      field("素材审核阈值（-1=跟随配置）", numberInput(node, "素材审核阈值")),
+      field("源视频路径（v2v/rv2v 用，可选）", textInput(node, "源视频路径")),
     ]));
 
     // 运行时素材库 / LOCK 状态
@@ -1394,6 +1806,7 @@ class DirectorCardUI {
       field("剪辑 CRF", numberInput(node, "剪辑CRF")),
       field("输出格式", selectControl(node, "输出格式")),
       field("转场", selectControl(node, "转场")),
+      field("转场时长（秒）", numberInput(node, "转场时长_秒")),
       field("字幕", selectControl(node, "字幕")),
       field("水印", selectControl(node, "水印")),
       field("封面帧", selectControl(node, "封面帧")),
@@ -1404,6 +1817,24 @@ class DirectorCardUI {
       switchControl(node, "显存清理_修脸前", "修脸前清理"),
       h("label", { text: "缓存编码" }), selectControl(node, "缓存编码"),
       h("label", { text: "缓存目录名" }), textInput(node, "缓存目录名"),
+    ]));
+    // ROUND56：补齐此前没有 UI 的高级参数（均在本蒙版区内，普通用户无需改）
+    panel.appendChild(h("div", { class: "dcdu-row", style: "margin-top:8px;font-weight:700;" }, [
+      h("span", { text: "高级（已给默认值；普通用户不用改）" })]));
+    panel.appendChild(h("div", { class: "dcdu-grid" }, [
+      field("目标总时长（分钟，0=不启用）", numberInput(node, "目标总时长_分钟")),
+      field("每批段数（长片分批）", numberInput(node, "每批段数")),
+      field("显存档位", selectControl(node, "显存档位")),
+      field("tiled 采样块数（0=关闭）", numberInput(node, "tiled采样")),
+      field("tiled 重叠像素", numberInput(node, "tiled重叠像素")),
+      field("水印文字", textInput(node, "水印文字")),
+    ]));
+    panel.appendChild(h("div", { class: "dcdu-row" }, [
+      switchControl(node, "断点续跑", "断点续跑"),
+      switchControl(node, "批次间卸载模型", "批次间卸载模型"),
+      switchControl(node, "剪枝模型", "剪枝模型"),
+      switchControl(node, "出片", "出片（False=只出提示词）"),
+      switchControl(node, "使用占位结果", "使用占位结果（无 Key 演示）"),
     ]));
     return panel;
   }
@@ -1455,6 +1886,13 @@ class DirectorCardUI {
       field("语义桥适配器", textInput(node, "语义桥适配器")),
       field("语义桥 alpha", numberInput(node, "语义桥alpha")),
     ]));
+    // ROUND56：返工/CNT 参数补入口（在本蒙版区内）
+    panel.appendChild(h("div", { class: "dcdu-row", style: "margin-top:8px;" }, [
+      switchControl(node, "自动返工", "自动返工"),
+      switchControl(node, "级联返工", "级联返工"),
+      h("label", { text: "CNT2 上限" }), numberInput(node, "CNT2上限", { width: "70px" }),
+      h("label", { text: "CNT3 上限" }), numberInput(node, "CNT3上限", { width: "70px" }),
+    ]));
     return panel;
   }
 
@@ -1503,6 +1941,90 @@ class DirectorCardUI {
     return h("div", { class: `dcdu-badge ${kind}`.trim(), text: String(text) });
   }
 
+  // ---- ROUND56：默认配置总览（可见，只读；普通用户无需修改）-----------
+  buildDefaultsSummary() {
+    const panel = h("div", { class: "dcdu-panel" });
+    const items = [
+      ["分段时长", "每段时长_秒", " s"], ["分辨率", "宽度", "×"], ["帧率", "帧率", " fps"],
+      ["素材上限", "素材最多生成个数", " 张"], ["转场", "转场", ""], ["字幕", "字幕", ""],
+      ["系统提示词", "系统提示词选择", ""], ["片头片尾", "片头片尾", ""],
+      ["tiled采样", "tiled采样", " 块"], ["CNT2/CNT3", "CNT2上限", "/"],
+      ["审核阈值", "审核阈值", " 分"], ["输出格式", "输出格式", ""],
+    ];
+    panel.appendChild(h("div", { class: "dcdu-title" }, [
+      h("span", { text: tr("默认配置（程序已配置，普通用户无需修改）",
+                            "Default configuration (preconfigured; no editing needed)") }),
+      h("span", { class: "dcdu-tag green", text: tr("只读", "read-only") }),
+    ]));
+    const grid = h("div", { class: "dcdu-grid" });
+    items.forEach(([label, name, unit]) => {
+      let val = readVal(this.node, name, "");
+      if (name === "宽度") val = `${val}×${readVal(this.node, "高度", "")}`;
+      if (name === "CNT2上限") val = `${val}/${readVal(this.node, "CNT3上限", "")}`;
+      grid.appendChild(field(label, h("span", { class: "dcdu-chip",
+        text: `${val === "" || val == null ? "（未设置）" : val}${unit || ""}` })));
+    });
+    panel.appendChild(grid);
+    panel.appendChild(h("div", { class: "dcdu-note", text: tr(
+      "以上默认值已写入工作流；高级参数被蒙版保护，普通用户不需要动；需要时点对应区域的「✋ 手动选择/手动填写」解除。",
+      "Defaults are baked into the workflow; advanced settings are masked — take manual control only if needed.") }));
+    return panel;
+  }
+
+  // ---- ROUND57：硬件与环境（只读，自动检测；不传任何 Key/路径） ----------
+  buildHardwarePanel() {
+    const panel = h("div", { class: "dcdu-panel" });
+    panel.appendChild(h("div", { class: "dcdu-title" }, [
+      h("span", { text: tr("硬件与环境（自动检测，只读）", "Hardware & environment (auto, read-only)") }),
+      button(tr("重新检测", "Refresh"), () => this.loadHardwareInfo(true), "tiny"),
+    ]));
+    this.hardwareBodyEl = h("div", { class: "dcdu-note", text: tr(
+      "正在检测显卡/后端与运行时补丁状态…", "Detecting hardware/backend and runtime patches…") });
+    panel.appendChild(this.hardwareBodyEl);
+    panel.appendChild(h("div", { class: "dcdu-note", text: tr(
+      "NVIDIA=CUDA 主路径；AMD=ROCm（Linux 推荐）；Intel=XPU；Apple=MPS；华为昇腾=NPU（需 CANN/torch_npu + 启动参数/补丁）。"
+      + "未真机验证的品牌会标注“未真机验证”，不会假装支持。",
+      "NVIDIA=CUDA; AMD=ROCm (Linux recommended); Intel=XPU; Apple=MPS; Ascend NPU needs CANN/torch_npu + patches. Unverified paths are labeled.") }));
+    return panel;
+  }
+
+  async loadHardwareInfo(force = false) {
+    if (!this.hardwareBodyEl) return;
+    this.hardwareBodyEl.textContent = tr("检测中…", "Detecting…");
+    try {
+      const data = await this.apiGet(`/bettercomfyui/hardware${force ? "?refresh=1" : ""}`);
+      const report = data.report || {};
+      const pre = data.preflight || {};
+      const patches = data.patches || {};
+      const lines = [];
+      lines.push(`${report.vendor || "?"} / ${report.backend || "?"} · ${report.device_name || "未识别"} · `
+        + `${Math.round((report.vram_mib || 0) / 1024)}GB · ${pre.tier_label || report.tier_label || "?"}`);
+      lines.push(tr("H3 全流程：", "Full H3: ") + ((pre.full_h3_supported ?? report.full_h3_supported) ? tr("支持/有条件", "supported/conditional") : tr("不保证", "not guaranteed"))
+        + tr(" · 补丁：", " · patches: ") + (patches.status || pre.patches_status || "?"));
+      if (pre.launch_args && pre.launch_args.length) lines.push(tr("推荐启动参数：", "Launch args: ") + pre.launch_args.join(" "));
+      if (pre.env && Object.keys(pre.env).length) lines.push("env: " + Object.entries(pre.env).map(([k, v]) => `${k}=${v}`).join("  "));
+      if (patches.comfy_kitchen && patches.comfy_kitchen.status) lines.push("comfy-kitchen: " + patches.comfy_kitchen.status);
+      (report.warnings || []).slice(0, 4).forEach((w) => lines.push("⚠ " + w));
+      if (this.hardwareChip) {
+        this.hardwareChip.textContent = `${report.vendor || "?"} · ${pre.tier || "?"} · ${Math.round((report.vram_mib || 0) / 1024)}GB`;
+        this.hardwareChip.className = "dcdu-chip " + (pre.tier === "A" ? "ok" : pre.tier === "D" ? "err" : "warn");
+      }
+      this.hardwareBodyEl.innerHTML = "";
+      lines.forEach((line) => this.hardwareBodyEl.appendChild(h("div", { class: "dcdu-note", text: line })));
+      if (data.report_text) {
+        try {
+          const det = document.createElement("details");
+          det.appendChild(h("summary", { class: "dcdu-note", text: tr("查看完整中文报告", "Full report") }));
+          det.appendChild(h("pre", { class: "dcdu-note", style: "white-space:pre-wrap;", text: data.report_text }));
+          this.hardwareBodyEl.appendChild(det);
+        } catch (e) { /* ignore */ }
+      }
+    } catch (err) {
+      if (this.hardwareChip) { this.hardwareChip.textContent = "硬件检测失败"; this.hardwareChip.className = "dcdu-chip err"; }
+      this.hardwareBodyEl.textContent = tr("硬件检测失败：", "Hardware detection failed: ") + (err.message || err);
+    }
+  }
+
   // ---- 底部：高级 / 原生表单 ------------------------------------------
   buildAdvanced() {
     const node = this.node;
@@ -1512,14 +2034,11 @@ class DirectorCardUI {
       h("span", { class: "dcdu-tag", text: "所有参数都在这里，只是默认折叠进 UI" }),
     ]));
     panel.appendChild(h("div", { class: "dcdu-row" }, [
-      button("显示/隐藏原生参数表单", () => {
-        this.hideNativeWidgets(!this.nativeHidden);
-        try {
-          const size = node.computeSize();
-          node.setSize([Math.max(node.size[0], size[0]), this.nativeHidden ? 1060 : size[1]]);
-        } catch (e) { /* ignore */ }
-      }),
-      h("span", { class: "dcdu-note", text: "原生控件值始终参与序列化；隐藏只影响显示（不删参数、不改旧工作流）" }),
+      h("span", { class: "dcdu-tag warn", text: tr("原生参数表单已停用", "Native form disabled") }),
+      h("span", { class: "dcdu-note", text: tr(
+        "为防止普通用户误调高级参数，原生参数表单不再提供显示入口；所有高级参数已整合到"
+        + "上方带蒙版的自定义面板（点「✋ 手动选择/手动填写」才可改）。",
+        "Native form is disabled; advanced params live in masked panels above.") }),
     ]));
     panel.appendChild(h("div", { class: "dcdu-row" }, [
       button("把当前分段写入时间轴JSON", () => this.syncJsonFromUi(), "green"),
@@ -1587,7 +2106,7 @@ class DirectorCardUI {
     const bar = h("div", { class: "dcdu-mask-legend" }, [
       h("span", { text: "🔒" }),
       h("span", { text: tr(
-        "自动生成区已蒙版（5 处：素材库 / 时间轴 / 采样 / 提示词增强 / 高级）——每块蒙版右侧都有「✋ 手动选择 / 手动填写」按钮，点了即可自己接管。",
+        "自动生成区已蒙版（6 处：素材库 / 时间轴 / 生成·采样 / 提示词增强 / 片头片尾·字幕台词 / 高级表单）——每块蒙版右侧都有「✋ 手动选择 / 手动填写」按钮，点了即可自己接管。",
         "5 auto-generated areas are masked (assets / timeline / sampling / prompt-enhance / advanced). "
         + "Each mask has a ✋ Take manual control button on the right.") }),
       button(tr("跳到第一块蒙版", "Jump to first mask"), () => {
@@ -1622,11 +2141,35 @@ class DirectorCardUI {
       h("label", { class: "dcdu-check" }, [
         this.multiToggleEl,
         h("span", { text: tr(
-          "多段剧本（可选：多章按顺序自动生成，每章 1 次 API；设置后忽略上方单段剧本）",
-          "Multi-script (optional: chapters generated in order, 1 API each; overrides the single script above)") }),
+          "多段剧本（可选：多章按顺序自动生成；设置后忽略上方单段剧本）",
+          "Multi-script (optional: chapters generated in order; overrides the single script above)") }),
       ]),
     ]);
+    // ROUND56：添加按钮常显，点击自动启用多段模式
+    multiHead.appendChild(button(tr("＋ 添加一段", "+ Add segment"), () => {
+      if (!this.multiToggleEl.checked) {
+        this.multiToggleEl.checked = true;
+        this.multiToggleEl.dispatchEvent(new Event("change"));
+      }
+      this.addMultiChapter();
+      try { this.multiChaptersEl.scrollIntoView({ block: "nearest" }); } catch (e) {}
+    }, "green tiny"));
     const multiBody = h("div", { class: "dcdu-multi-body", style: "display:none;" });
+    this.multiBodyEl = multiBody;
+    // ROUND56：动态多段列表（＋添加一段 / 删除 / 上移下移）
+    this.multiCountEl = h("span", { class: "dcdu-note", text: "" });
+    multiBody.appendChild(h("div", { class: "dcdu-row" }, [
+      h("span", { class: "dcdu-chip on", text: tr("多段剧本列表（每段 = 一章/一段剧本）",
+                                                    "Multi-script list (each item = one chapter/script)") }),
+      this.multiCountEl,
+      button(tr("＋ 添加一段", "+ Add segment"), () => this.addMultiChapter(), "green tiny"),
+      button(tr("清空", "Clear"), () => {
+        this.syncMultiChapters([""]);
+        this.renderMultiChapters();
+      }, "tiny"),
+    ]));
+    this.multiChaptersEl = h("div", { class: "dcdu-multi-list" });
+    multiBody.appendChild(this.multiChaptersEl);
     const multiTa = h("textarea", {
       class: "dcdu-textarea dcdu-multi-script",
       placeholder: tr(
@@ -1636,16 +2179,14 @@ class DirectorCardUI {
     this.multiScriptEl = this.bindWidget(multiTa, "多段剧本", { multiline: true });
     const sepInp = h("input", { class: "dcdu-input", style: "max-width:140px;" });
     this.multiSepEl = this.bindWidget(sepInp, "多段剧本分隔符");
-    multiBody.appendChild(this.multiScriptEl);
-    multiBody.appendChild(h("div", { class: "dcdu-row" }, [
-      h("span", { class: "dcdu-note", text: tr("分隔符", "Delimiter") }),
-      this.multiSepEl,
-    ]));
     multiBody.appendChild(h("div", { class: "dcdu-note", text: tr(
-      "多章会按顺序逐章生成（同项目复用素材库）；章与章之间目前是硬切，可在后处理加转场；每章内部仍只调用 1 次 API。",
-      "Chapters run sequentially (same project reuses asset library); boundaries are hard cuts (add transitions in post); each chapter still uses exactly 1 API call.") }));
+      "每段 = 一章/一段剧本，按顺序生成（同项目复用素材库）；每段 1 次 API。"
+      + "旧的「多段剧本+分隔符」文本仍兼容（高级原生表单可见），这里以列表为准。",
+      "Each item = one chapter/script, generated sequentially (same project reuses assets); "
+      + "1 API per item. Legacy delimiter text remains supported; this list takes priority.") }));
     this.multiToggleEl.addEventListener("change", () => {
       multiBody.style.display = this.multiToggleEl.checked ? "block" : "none";
+      if (this.multiToggleEl.checked) this.renderMultiChapters();
       this.refreshHeight();
     });
     hero.appendChild(multiHead);
@@ -1770,6 +2311,19 @@ class DirectorCardUI {
     return data;
   }
 
+  async apiPost(path, body) {
+    const res = await api.fetchApi(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+    });
+    const text = await res.text();
+    let data = {};
+    try { data = text ? JSON.parse(text) : {}; } catch (e) { data = {}; }
+    if (!res.ok || data.ok === false) throw new Error(`${res.status} ${data.error || res.statusText}`);
+    return data;
+  }
+
   /** 读取剧核面板的 API 配置状态（面板已配 Key 时不再提示去填）。 */
   async loadPanelApiConfig() {
     try {
@@ -1888,15 +2442,17 @@ class DirectorCardUI {
     }
     const counts = this.projectContext?.counts || project;
     const chips = [
-      [tr("项目", "Project"), project.display_name || "—"],
-      [tr("素材", "Assets"), counts.assets ?? 0],
+      [tr("项目", "Project"), project.display_name || "—"],      [tr("素材", "Assets"), counts.assets ?? 0],
       [tr("已 LOCK", "LOCKED"), counts.locked ?? 0],
       [tr("提示词", "Prompts"), counts.prompts ?? 0],
       [tr("成片", "Films"), counts.films ?? 0],
       [tr("更新", "Updated"), fmtTimeShort(project.updated_at)],
     ];
     for (const [k, v] of chips) {
-      el.appendChild(h("span", { class: "dcdu-pchip", html: `${k} <b>${String(v)}</b>` }));
+      // ROUND58 安全修复：display_name 等来自项目元数据，改用文本节点，禁止 HTML 注入。
+      const chip = h("span", { class: "dcdu-pchip", text: `${k} ` });
+      chip.appendChild(h("b", { text: String(v) }));
+      el.appendChild(chip);
     }
   }
 
@@ -1984,30 +2540,32 @@ class DirectorCardUI {
     lists.appendChild(fList);
   }
 
-  /** ③ API Key / 模型 / API Base（可输入项前置） */
+  /** ③ API Key / 模型 / API Base（ROUND58 安全：密钥不写入 workflow/history） */
   buildApiInputs() {
     const panel = h("div", { class: "dcdu-panel" });
+    // 安全修复：旧工作流/旧版本可能把 api_key/api_base 存在 widget 中，加载时清空，
+    // 避免下一次 Queue 把它提交进 ComfyUI /history。密钥只从右侧面板/环境变量读取。
+    try {
+      if (String(readVal(this.node, "api_key", "") || "").trim()) {
+        writeVal(this.node, "api_key", "");
+      }
+      if (String(readVal(this.node, "api_base", "") || "").trim()) {
+        writeVal(this.node, "api_base", "");
+      }
+    } catch (e) { /* ignore */ }
     panel.appendChild(h("div", { class: "dcdu-title" }, [
       h("span", { class: "dcdu-step", text: "③" }),
-      h("span", { text: tr("API 配置（密钥 / 模型 / 接口地址）", "API config (key / model / base)") }),
-      h("span", { class: "dcdu-tag", text: tr("与右侧剧核面板共用同一份配置", "Shared with the DramaCore panel") }),
+      h("span", { text: tr("API 配置（密钥只在右侧剧核面板/环境变量保存）", "API config (key only in DramaCore panel/env)") }),
+      h("span", { class: "dcdu-tag ok", text: tr("不写入工作流", "not in workflow") }),
     ]));
-    const keyInput = h("input", {
-      class: "dcdu-input", id: "dcdu-api-key", type: "password", autocomplete: "off",
-      placeholder: tr("API Key（留空=用已保存的密钥）", "API Key (empty = use saved key)"),
-    });
-    this.bindWidget(keyInput, "api_key", { password: true });
     const modelInput = this.bindWidget(h("input", { class: "dcdu-input", placeholder: "deepseek-chat" }), "model");
-    const baseInput = this.bindWidget(h("input", { class: "dcdu-input", placeholder: "https://api.deepseek.com" }), "api_base");
     panel.appendChild(h("div", { class: "dcdu-grid" }, [
-      field(tr("API Key", "API Key"), keyInput),
       field(tr("模型（留空=跟随面板）", "Model (empty = panel default)"), modelInput),
-      field(tr("API Base（留空=跟随面板）", "API Base (empty = panel default)"), baseInput),
     ]));
     panel.appendChild(h("div", { class: "dcdu-note", text: tr(
-      "提示：更完整的默认提示词/语言/默认模型配置在右侧「剧核 / DramaCore」面板里；这里只放运行必需的三个字段。",
-      "Tip: full defaults (system prompt/language/models) live in the DramaCore panel; only the 3 run-critical fields are here.",
-    ) }));
+      "安全：API Key / API Base 不再写入工作流，也不会进入 ComfyUI 运行历史；"
+      + "请在右侧「Better ComfyUI / 剧核」面板填写并保存，或设置环境变量 BETTERCOMFYUI_API_KEY。",
+      "Security: API Key/Base are no longer written into the workflow or ComfyUI history; configure them in the DramaCore panel or BETTERCOMFYUI_API_KEY env.") }));
     return panel;
   }
 
@@ -2066,6 +2624,13 @@ class DirectorCardUI {
       }, "primary big dcdu-mask-unlock"),
     ]);
     wrap.appendChild(overlay);
+    try { body.inert = true; } catch (e) { /* ignore */ }
+    try {
+      const unlock = overlay.querySelector(".dcdu-mask-unlock");
+      if (unlock) unlock.addEventListener("click", () => {
+        try { body.inert = false; } catch (e) { /* ignore */ }
+      });
+    } catch (e) { /* ignore */ }
     return wrap;
   }
 
@@ -2084,6 +2649,9 @@ class DirectorCardUI {
     panel.appendChild(this.auditGridEl);
     this.auditNoteEl = h("div", { class: "dcdu-note" });
     panel.appendChild(this.auditNoteEl);
+    this.transitionDecisionEl = h("div", { class: "dcdu-note" });
+    panel.appendChild(this.transitionDecisionEl);
+    this.renderTransitionDecision();
     return panel;
   }
 
@@ -2108,8 +2676,11 @@ class DirectorCardUI {
     walkText(ui.text, 0);
     const audit = auditTexts.join("\n");
 
+    this.lastReport = report || {};
     const metrics = this.metricsFromReport(report) || this.metricsFromAuditText(audit);
     this.audit = metrics;
+    this.renderPromptSegments();
+    this.renderTransitionDecision();
     // 运行时素材审核行（供素材区卡片显示分数/状态）
     // 契约（ROUND49 director-agent）：assets.assets[] 每张素材含 score/avg_score/state/lock_status；
     // 其次 assets.review_summary.states[]；再退回 created/locked/blocked/rounds 计数行。
@@ -2401,6 +2972,128 @@ class DirectorCardUI {
     }
   }
 
+  // ---- ROUND55：片头片尾 / 素材版本回滚 --------------------------------
+  buildRound55Extras() {
+    const node = this.node;
+    const panel = h("div", { class: "dcdu-panel" });
+    panel.appendChild(h("div", { class: "dcdu-title" }, [
+      h("span", { text: tr("片头片尾（点按钮选择，无需改原生参数）", "Intro/Outro (click to choose)") }),
+      h("span", { class: "dcdu-tag", text: tr("静态标题卡 / 片尾演职员卡", "static title & credits cards") }),
+    ]));
+    const modes = ["无", "片头", "片尾", "片头+片尾"];
+    const row = h("div", { class: "dcdu-row" });
+    const renderButtons = () => {
+      row.innerHTML = "";
+      const cur = String(readVal(node, "片头片尾", "无") || "无");
+      modes.forEach((m) => {
+        row.appendChild(button(tr(m, m), () => {
+          writeVal(node, "片头片尾", m);
+          renderButtons();
+          this.refreshNextStep();
+        }, m === cur ? "on" : "tiny"));
+      });
+    };
+    renderButtons();
+    panel.appendChild(row);
+    panel.appendChild(h("div", { class: "dcdu-grid" }, [
+      field(tr("片头文字", "Intro title"), textInput(node, "片头文字", {
+        placeholder: tr("留空=默认标题", "empty = default title") })),
+      field(tr("片尾文字", "Outro title"), textInput(node, "片尾文字", {
+        placeholder: tr("留空=默认片尾", "empty = default outro") })),
+    ]));
+    panel.appendChild(field(tr("片尾演职员（每行一条）", "Outro credits (one per line)"),
+      textInput(node, "片尾演职员", { multiline: true })));
+    panel.appendChild(h("div", { class: "dcdu-note", text: tr(
+      "片头/片尾由 Finalize 在成片首尾拼接；生成失败会如实告警，不冒充成功。",
+      "Cards are prepended/appended at finalize; failures are reported honestly.") }));
+    panel.appendChild(field(tr("字幕台词（硬字幕文本；每行一句，留空=自动从剧本引号台词提取）",
+                              "Subtitle lines (one per line; empty = auto extract dialogue)"),
+      textInput(node, "字幕台词", { multiline: true })));
+
+    // ---- 素材版本回滚入口 ----
+    panel.appendChild(h("div", { class: "dcdu-title", style: "margin-top:10px;" }, [
+      h("span", { text: tr("素材版本回滚", "Asset version rollback") }),
+      h("span", { class: "dcdu-tag", text: tr("哈希校验 + 旧结论失效提示", "hash-gated + invalidates old conclusions") }),
+    ]));
+    this.rbProjectEl = h("input", { class: "dcdu-input", placeholder: tr(
+      "项目显示名 / project_id（留空=当前项目）", "project name/id (empty = current)") });
+    this.rbAssetEl = h("input", { class: "dcdu-input", placeholder: tr(
+      "素材名或 asset_id", "asset name/id") });
+    this.rbListEl = h("div", { class: "dcdu-note" });
+    panel.appendChild(h("div", { class: "dcdu-row" }, [
+      this.rbProjectEl, this.rbAssetEl,
+      button(tr("查询版本", "List versions"), () => this.rbListVersions(), "tiny"),
+    ]));
+    panel.appendChild(this.rbListEl);
+    return panel;
+  }
+
+  async rbListVersions() {
+    let proj = (String(this.rbProjectEl?.value || "").trim()
+      || String(readVal(this.node, "项目", "") || "").trim());
+    const asset = String(this.rbAssetEl?.value || "").trim();
+    // 回滚接口只认 32 位 project_id：把项目显示名解析成 id（优先已选项目 / projects 列表）
+    if (proj && !/^[0-9a-f]{32}$/i.test(proj)) {
+      const selected = String(this.projectId || "").trim();
+      const entry = (this.projects || []).find((x) =>
+        String(x.display_name || "").trim().toLowerCase() === proj.toLowerCase());
+      if (selected && (!this.projects || !this.projects.length
+          || !this.projects.some((x) => x.project_id === selected) || proj === String(readVal(this.node, "项目", "")).trim())) {
+        proj = selected;
+      } else if (entry && entry.project_id) {
+        proj = entry.project_id;
+      }
+    }
+    if (!proj) { this.rbListEl.textContent = tr("请先选择项目（或在 ② 项目栏选择）", "Select a project first"); return; }
+    this.rbListEl.textContent = tr("查询中…", "Loading…");
+    try {
+      const data = await this.apiGet(
+        `/bettercomfyui/rollback/list?project_id=${encodeURIComponent(proj)}`
+        + `&asset=${encodeURIComponent(asset)}`);
+      const rows = Array.isArray(data.versions) ? data.versions : [];
+      if (!rows.length) { this.rbListEl.textContent = tr("没有版本记录", "No versions"); return; }
+      const box = h("div", { class: "dcdu-list" });
+      rows.forEach((v) => {
+        const label = `${v.asset_name || v.asset_id || ""} v${v.version}`;
+        const line = h("div", { class: "dcdu-row" }, [
+          h("span", { class: "dcdu-chip", text: label }),
+          h("span", { class: "dcdu-chip", text: String(v.lock_status || v.status || "") }),
+          h("span", { class: "dcdu-chip " + (v.hash_ok ? "ok" : "err"),
+                      text: v.hash_ok ? tr("hash✓", "hash✓") : tr("hash✗", "hash✗") }),
+          ...(v.is_current_lock
+            ? [h("span", { class: "dcdu-chip on", text: tr("当前 LOCK", "current LOCK") })]
+            : [button(tr("回滚到此版本", "Rollback"), () => this.rbApply(v, proj, asset), "tiny")]),
+        ]);
+        box.appendChild(line);
+      });
+      this.rbListEl.innerHTML = "";
+      this.rbListEl.appendChild(box);
+    } catch (err) {
+      this.rbListEl.textContent = tr(`查询失败：${err.message}`, `List failed: ${err.message}`);
+    }
+  }
+
+  async rbApply(v, proj, asset) {
+    const label = `${v.asset_name || v.asset_id || ""} v${v.version}`;
+    const ok = window.confirm(tr(
+      `确认回滚到 ${label}？\n旧结论会失效，需要重新生成/重新挂参考图。`,
+      `Rollback to ${label}? Old conclusions become invalid; regenerate/re-mount refs.`));
+    if (!ok) return;
+    try {
+      await this.apiPost("/bettercomfyui/rollback/apply", {
+        project_id: proj, asset, target_version: v.version,
+        operator: "panel-ui", reason: "面板手动回滚",
+        require_hash_ok: true, revalidate_lock: true,
+      });
+      this.rbListEl.textContent = tr(
+        `回滚成功：${label}（旧结论已失效，请重新生成引用段）`,
+        `Rollback OK: ${label} (old conclusions invalidated)`);
+      await this.rbListVersions();
+    } catch (err) {
+      this.rbListEl.textContent = tr(`回滚失败：${err.message}`, `Rollback failed: ${err.message}`);
+    }
+  }
+
   // ---- 总装配 ----------------------------------------------------------
   build() {
     this.root.innerHTML = "";
@@ -2408,6 +3101,11 @@ class DirectorCardUI {
     this.root.appendChild(this.buildHead());
     this.root.appendChild(this.buildNextStep());
     this.root.appendChild(this.buildMaskLegend());
+    this.root.appendChild(this.collapsible("默认配置已设置（查看）", "程序默认值",
+      "点开展开核对；只读，无需修改", this.buildDefaultsSummary()));
+    this.root.appendChild(this.collapsible("硬件与环境（自动检测）",
+      "NVIDIA / AMD / Intel / Apple / 昇腾", "只读；显示能力分级与运行时补丁状态",
+      this.buildHardwarePanel()));
     this.root.appendChild(this.buildScriptInput());
     this.root.appendChild(this.buildProjectBar());
     this.root.appendChild(this.buildApiInputs());
@@ -2421,8 +3119,18 @@ class DirectorCardUI {
     this.root.appendChild(this.maskedSection("enhance",
       this.collapsible("⑩ 提示词 · 增强 · 审核", "Refine / SelfLift / 阈值", "点开展开", this.buildEnhance()),
       "Refine/SelfLift/FaceRefine/审核阈值为高级项，程序会自动使用默认值"));
+    this.root.appendChild(this.maskedSection("intro_outro",
+      this.collapsible("⑫ 片头片尾 · 素材版本回滚 · 字幕台词", "高级（默认已配置）",
+        "点开展开；编辑需先解除蒙版", this.buildRound55Extras()),
+      "片头片尾/字幕台词/版本回滚为高级项：默认已配置好，普通用户无需修改"));
+    this.root.appendChild(this.collapsible(
+      "⑭ 提示词（系统 / 分镜 / 素材）", "默认 H3 提示词精简版（可见）",
+      "点开展开查看系统提示词/逐段提示词；编辑需先点「✋ 手动编辑」（高级）",
+      this.buildPromptsPanel()));
     this.root.appendChild(this.collapsible("⑪ 运行状态日志", "执行输出回填", "点开展开", this.buildStatus()));
     this.root.appendChild(this.buildAuditSummary());
+    this.loadPromptPanel().catch(() => {});
+    this.loadHardwareInfo().catch(() => {});
     this.root.appendChild(this.maskedSection("advanced",
       this.collapsible("⑬ 高级（原生参数表单 / 时间轴 JSON）", "默认折叠", "点开展开", this.buildAdvanced()),
       "原生参数表单与时间轴JSON为高级项，程序会自动构造"));

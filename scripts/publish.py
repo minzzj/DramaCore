@@ -33,7 +33,7 @@ import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-STAGE = Path(r"C:\Users\Administrator\AppData\Local\Temp\bcui_stage")
+STAGE = Path(r"[USER-HOME]\AppData\Local\Temp\bcui_stage")
 
 #: 需要从暂存区发布的路径（相对仓库根）。加新文件时补到这里，避免漏发。
 TRACKED = (

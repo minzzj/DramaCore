@@ -1,7 +1,7 @@
 # ROUND47 真机全链（真实 Key）+ UI 移植 + 逻辑图 1:1 对照 + 功能补齐
 
 > 2026-10-18 15:40–16:20（Asia/Shanghai）
-> 新容器：SSH `ssh -p 22 root@your-gpu-host`；**ComfyUI 外网端口改为 `http://your-gpu-host:8188`**
+> 新容器：SSH `ssh -p PORT user@your-gpu-host`；**ComfyUI 外网端口改为 `http://your-gpu-host:8188`**
 > （旧 8188 已不是 ComfyUI；端口映射：8188→8188、22→22、8000→8000、8288→8288、8388→8388、8888→8888、9999→8188）
 > 本报告所有数字来自真机证据文件；远端 Key 已配置（日志/面板只显示遮罩 `sk-***f9f7`）。
 

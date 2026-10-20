@@ -30,7 +30,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-REPO = Path(r"H:\minzzj文件\技术部\项目\官方\Better comfyUI")
+REPO = Path(r"[PROJECT-ROOT]")
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "bettercomfyui_comfy" / "workflows"))
 

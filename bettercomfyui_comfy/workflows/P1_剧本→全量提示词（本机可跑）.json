@@ -1,0 +1,274 @@
+{
+  "last_node_id": 5,
+  "last_link_id": 6,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BetterComfyUISettings",
+      "pos": [
+        -2200,
+        100
+      ],
+      "size": [
+        380,
+        180
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "out1",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        },
+        {
+          "name": "out2",
+          "type": "STRING",
+          "links": [
+            3
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 2,
+      "type": "BetterComfyUIEverything",
+      "pos": [
+        -1700,
+        100
+      ],
+      "size": [
+        520,
+        640
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "api_key",
+          "type": "STRING",
+          "link": 1
+        },
+        {
+          "name": "model",
+          "type": "STRING",
+          "link": 2
+        },
+        {
+          "name": "api_base",
+          "type": "STRING",
+          "link": 3
+        }
+      ],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "out1",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "out2",
+          "type": "STRING",
+          "links": [
+            4
+          ]
+        },
+        {
+          "name": "out3",
+          "type": "STRING",
+          "links": [
+            5
+          ]
+        },
+        {
+          "name": "out4",
+          "type": "STRING",
+          "links": [
+            6
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "第一章 雪夜\n林秀在雪夜推门走进客栈，老陈抬头看她，两人对视。\n林秀在桌边坐下，窗外雪落无声，灯影摇曳。",
+        "默认（影视拆解，推荐）",
+        "",
+        "@冷蓝电影光",
+        "电影感，真实自然，冷蓝电影光，低饱和，音画同步",
+        "中文",
+        "按镜头",
+        "我的短剧",
+        true,
+        10.0,
+        0,
+        "1080P",
+        24,
+        true,
+        "角色>场景>物品>分镜（推荐）",
+        "",
+        "整个素材库（推荐）",
+        "模型审核",
+        70,
+        "自动（导演台尾部帧辅助，推荐）",
+        false,
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 3,
+      "type": "PreviewAny",
+      "pos": [
+        -900,
+        100
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 4
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "提示词JSON（E1–E5 + 素材库统计）"
+    },
+    {
+      "id": 4,
+      "type": "PreviewAny",
+      "pos": [
+        -900,
+        400
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 5
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "素材清单（登记/复用/LOCK）"
+    },
+    {
+      "id": 5,
+      "type": "PreviewAny",
+      "pos": [
+        -900,
+        700
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 6
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "审计报告（API 调用次数/模式）"
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      1,
+      1,
+      2,
+      1,
+      "STRING"
+    ],
+    [
+      3,
+      1,
+      2,
+      2,
+      2,
+      "STRING"
+    ],
+    [
+      4,
+      2,
+      2,
+      3,
+      0,
+      "STRING"
+    ],
+    [
+      5,
+      2,
+      3,
+      4,
+      0,
+      "STRING"
+    ],
+    [
+      6,
+      2,
+      4,
+      5,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {},
+  "version": 0.4
+}

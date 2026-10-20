@@ -49,7 +49,8 @@ def test_store_sources_exist():
         "paths.py",
         "projects.py",
         "segments.py",
-    }, names
+        "rollback.py",
+    }
 
 
 def test_no_bom_and_all_files_parse():

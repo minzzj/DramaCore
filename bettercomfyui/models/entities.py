@@ -135,11 +135,18 @@ class PromptParams:
     api_key_env: str | None = None                # 只写环境变量名，避免明文密钥
     max_retries: int = 2                          # 传输层错误重试；4xx 不重试
     retry_backoff_s: float = 0.5
-    max_tokens: int | None = None
+    max_tokens: int | None = 8192
     extra_headers: dict = field(default_factory=dict)
-    custom_request_template: dict = field(default_factory=dict)
+    custom_request_template: dict = field(default_factory=lambda: {
+        "model": "{model}",
+        "messages": [
+            {"role": "system", "content": "{system}"},
+            {"role": "user", "content": "{user}"},
+        ],
+        "stream": False,
+    })
     #: custom provider **必填**：从响应取文本的路径，如 "choices.0.message.content"
-    custom_response_path: str | None = None
+    custom_response_path: str | None = "choices.0.message.content"
     custom_response_template: str | None = None
 
 

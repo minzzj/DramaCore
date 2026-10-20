@@ -46,9 +46,10 @@ from typing import Any, Iterable, Mapping
 from ..models.enums import AssetType
 from .errors import PromptError
 from .gateway import GatewayError, build_gateway
-from .inject import build_prompt_messages
+from .inject import build_prompt_messages, parse_manifest_asset_names
 from .validate import (
     ScriptValidationError,
+    adapt_script_output,
     canonicalize_script,
     parse_with_report,
     validate_script,
@@ -351,11 +352,18 @@ def generate_script_prompts(
             f"原始输出前 500 字：\n{raw_text[:500]}"
         ) from exc
 
+    #: 模型实际注入的既有素材清单（用于允许 asset_refs 逐字引用清单里的名称）。
+    injected_manifest = str(messages.get("manifest") or manifest or "")
     try:
-        canonical = canonicalize_script(parsed)
+        canonical, adapt_warnings, output_shape = adapt_script_output(parsed)
+        existing_names = parse_manifest_asset_names(injected_manifest)
         dropped_refs: list[str] = []
-        script = validate_script(canonical, allow_drop_invalid_refs=True,
-                                 dropped_refs=dropped_refs)
+        script = validate_script(
+            canonical,
+            existing_assets=existing_names or None,
+            allow_drop_invalid_refs=True,
+            dropped_refs=dropped_refs,
+        )
     except ScriptValidationError as exc:
         raise ScriptBuildError(
             "模型返回的结构不合法（不会进入素材生成）：\n"
@@ -372,6 +380,7 @@ def generate_script_prompts(
     #: method = "json" | "delimited" —— 这就是实际生效的解析路径（不是猜的）。
     output_format_detected = getattr(report, "method", None)
 
+    notes = [str(w) for w in adapt_warnings]
     meta: dict[str, Any] = {
         "mode": "真实模型（一次调用）",
         "api_calls": api_calls,
@@ -381,13 +390,16 @@ def generate_script_prompts(
         "url": gateway_info.get("url", ""),
         "output_format_requested": fmt,
         "output_format_detected": output_format_detected,
+        #: 模型输出的形状：script / legacy / handbook（handbook=已由适配层显式转换）。
+        "output_shape": output_shape,
         "manifest_injected": bool(messages.get("manifest")),
+        "existing_asset_names": len(existing_names),
         "asset_count": len(grouped.get("CHARACTER", []))
         + len(grouped.get("SCENE", []))
         + len(grouped.get("PROP", []))
         + len(grouped.get("SHOT", [])),
         "video_segment_count": len(video_prompts),
-        "notes": [],
+        "notes": notes,
     }
     warnings = getattr(report, "warnings", None)
     if warnings:

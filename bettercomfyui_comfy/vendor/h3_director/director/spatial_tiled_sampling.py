@@ -15,8 +15,12 @@ import logging
 import math
 from typing import Any, Callable
 
-import torch
-import torch.nn.functional as F
+try:  # torch 只在真正逐块推理时必需；离线单测环境允许仅导入钳制/开关函数
+    import torch
+    import torch.nn.functional as F
+except Exception:  # noqa: BLE001 - 无 torch 的离线测试环境
+    torch = None  # type: ignore[assignment]
+    F = None  # type: ignore[assignment]
 
 log = logging.getLogger("ComfyUI-MiniMaxH3-Director.director.spatial_tiles")
 
@@ -39,6 +43,133 @@ def clamp_tile_overlap(raw: Any) -> int:
     except (TypeError, ValueError):
         n = 128
     return max(0, min(2048, n))
+
+
+#: Node/execute 入口的默认重叠像素（ROUND55：one_stop 的 tiled采样 只传块数）
+DEFAULT_TILE_OVERLAP_PIXELS = 64
+#: 钳制后的最大块数（与 clamp_n_tiles 一致；超出会写告警，不静默）
+MAX_TILE_COUNT = 8
+
+
+def _as_int(raw: Any, default: int) -> tuple[int, bool]:
+    """宽松转 int；失败返回 (default, False) 供调用方写告警。"""
+    if isinstance(raw, bool):
+        return (int(raw), True)
+    try:
+        return (int(raw), True)
+    except (TypeError, ValueError):
+        return (default, False)
+
+
+def resolve_tiled_request(
+    n_tiles: Any = 0,
+    overlap_pixels: Any = DEFAULT_TILE_OVERLAP_PIXELS,
+) -> dict:
+    """把「tiled采样」原始参数解析成执行计划（纯函数，无 torch 依赖，可离线测试）。
+
+    返回结构::
+
+        {
+          "enabled": bool,            # 是否真的启用空间分块
+          "n_tiles": int,             # 启用时 = 钳制后的块数；关闭时 = 0
+          "overlap_pixels": int,      # 钳制后的重叠像素（关闭时也保留钳制值）
+          "requested_n_tiles": int,   # 用户原值（便于审计）
+          "warnings": list[str],      # 必须让用户看到的降级/钳制/组合问题
+          "report": str,              # 一行审计文本（executor 会追加到 report）
+        }
+
+    语义（ROUND55 约定）：
+    * ``n_tiles <= 1``（含 0 / 负数 / 非法值）→ **完全关闭**，返回 enabled=False，
+      `sample_single_stage` 不会包装采样器 → 与旧版行为逐字节一致；
+    * ``n_tiles > MAX_TILE_COUNT`` → 钳到 8 并告警（不静默）；
+    * overlap 超出 [0, 2048] → 钳制并告警。
+    * 与 SelfLift / Refine 的组合由 :func:`describe_tiled_combinations` 说明，
+      本函数不改变启用开关（避免"静默禁用"）。
+    """
+    raw_n, n_ok = _as_int(n_tiles, 0)
+    raw_ov, ov_ok = _as_int(overlap_pixels, DEFAULT_TILE_OVERLAP_PIXELS)
+    warnings: list[str] = []
+    if not n_ok:
+        warnings.append(
+            f"⚠️ tiled 采样参数非法（tiled_n_tiles={n_tiles!r}）：按关闭处理（0）")
+        raw_n = 0
+    if not ov_ok:
+        warnings.append(
+            f"⚠️ tiled 重叠像素非法（tiled_overlap_pixels={overlap_pixels!r}）："
+            f"回默认 {DEFAULT_TILE_OVERLAP_PIXELS}px")
+        raw_ov = DEFAULT_TILE_OVERLAP_PIXELS
+    clamped_n = clamp_n_tiles(raw_n)          # 1..8
+    clamped_ov = clamp_tile_overlap(raw_ov)   # 0..2048
+    if clamped_n != raw_n and raw_n > 1:
+        warnings.append(
+            f"⚠️ tiled 块数 {raw_n} 超出 vendor 支持范围 [{2}, {MAX_TILE_COUNT}]："
+            f"已钳制为 {clamped_n}")
+    if clamped_ov != raw_ov:
+        warnings.append(
+            f"⚠️ tiled 重叠像素 {raw_ov} 超出 [0, 2048]：已钳制为 {clamped_ov}px")
+    enabled = raw_n > 1
+    if enabled:
+        report = (
+            f"Tiled sampling: ON（spatial n_tiles={clamped_n} "
+            f"overlap={clamped_ov}px；只对主采样器做空间分块，时间维/音频维不分块）")
+        return {
+            "enabled": True,
+            "n_tiles": clamped_n,
+            "overlap_pixels": clamped_ov,
+            "requested_n_tiles": raw_n,
+            "warnings": warnings,
+            "report": report,
+        }
+    if raw_n <= 1:
+        report = (
+            f"Tiled sampling: off（tiled_n_tiles={raw_n}，保持旧版全画布采样路径；"
+            "默认 0 行为不变）")
+        return {
+            "enabled": False,
+            "n_tiles": 0,
+            "overlap_pixels": clamped_ov,
+            "requested_n_tiles": raw_n,
+            "warnings": warnings,
+            "report": report,
+        }
+    return {
+        "enabled": False,
+        "n_tiles": 0,
+        "overlap_pixels": clamped_ov,
+        "requested_n_tiles": raw_n,
+        "warnings": warnings,
+        "report": (
+            f"Tiled sampling: off（tiled_n_tiles={raw_n}，保持旧版全画布采样路径；"
+            "默认 0 行为不变）"),
+    }
+
+
+def describe_tiled_combinations(
+    request: dict,
+    *,
+    selflift: bool = False,
+    refine: bool = False,
+) -> list[str]:
+    """tiled 与 SelfLift / Refine 的组合说明（纯函数，离线可测）。
+
+    * SelfLift 一采走 ``sample_selflift_stage`` 自己的分阶段采样器，tiled 的
+      采样器包装只挂在主采样路径上 → 明确告警「该段/本次 SelfLift 路径未启用 tiled」；
+    * Refine 二采/放大二采走独立采样路径 → 只提示「Refine 未分块」，主采样仍然分块；
+    * 两者都不启用时返回空列表（不制造噪音）。
+    """
+    notes: list[str] = []
+    enabled = bool(request.get("enabled"))
+    if not enabled:
+        return notes
+    if selflift:
+        notes.append(
+            "⚠️ tiled 采样与 SelfLift 不叠加：SelfLift 一采使用自身分阶段采样器，"
+            "本次 SelfLift 实际执行的段不会启用空间分块（主采样段仍启用）")
+    if refine:
+        notes.append(
+            "Tiled sampling: Refine 二采/放大二采走独立采样路径，未做空间分块"
+            "（主采样已分块）")
+    return notes
 
 
 def compute_tile_starts(total: int, n_tiles: int, overlap: int) -> tuple[list[int], int]:
@@ -369,6 +500,14 @@ def _invoke_model(model_k, x, sigma, denoise_mask, call_kw: dict):
     return type(model_k).__call__(model_k, x, sigma, denoise_mask, **kwargs)
 
 
+def _require_torch() -> None:
+    """真正逐块推理前确认 torch 可用；缺失时抛清晰异常，绝不静默退回全画布。"""
+    if torch is None or F is None:
+        raise RuntimeError(
+            "tiled 采样需要 PyTorch：当前环境无法 import torch，已拒绝执行空间分块"
+            "（请安装带 torch 的 ComfyUI 环境，或把 tiled 采样设为 0）")
+
+
 def _tiled_model_call(
     model_k,
     x,
@@ -381,6 +520,7 @@ def _tiled_model_call(
     overlap_pixels: int,
     **kwargs,
 ):
+    _require_torch()
     import comfy.utils
 
     cfg = getattr(model_k, "inner_model", None)
@@ -561,6 +701,9 @@ def wrap_sampler_spatial_tiles(
     """Patch ``sampler.sampler_function`` so each model eval is spatially tiled.
 
     Returns a restore callback. No-op when n_tiles <= 1.
+
+    只替换 ``sampler.sampler_function``（离线可测、不需要 torch）；
+    torch 依赖推迟到真正推理（``_tiled_model_call``）时才检查，缺失即抛清晰异常。
     """
     n_tiles = clamp_n_tiles(n_tiles)
     overlap_pixels = clamp_tile_overlap(overlap_pixels)

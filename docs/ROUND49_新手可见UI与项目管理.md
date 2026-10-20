@@ -102,9 +102,9 @@
 
 ```powershell
 # 1) 本地打包（沿用既有流程）
-cd 'H:\minzzj文件\技术部\项目\官方\Better comfyUI'
+cd '[PROJECT-ROOT]'
 python -B scripts/prepare_remote_bundle.py
-scp -P 8188 dist\bettercomfyui_bundle_*.zip root@your-gpu-host:/data/
+scp -P 8188 dist\bettercomfyui_bundle_*.zip user@your-gpu-host:/data/
 ```
 
 ```bash
