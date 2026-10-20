@@ -226,7 +226,7 @@ bettercomfyui_comfy/everything_node.py:521 （报错文案里点名该文件）
 | 模式 | 命中 | 判定 |
 |---|---|---|
 | OpenAI 风格 `sk-…` | **0** | ✅ |
-| GitHub Token `ghp_REDACTED/gho_/ghu_/ghs_/ghr_` / `github_pat_` | **0** | ✅ |
+| GitHub Token `ghp_REDACTEDREDACTED/gho_/ghu_/ghs_/ghr_` / `github_pat_` | **0** | ✅ |
 | AWS `AKIA…` | **0** | ✅ |
 | `[REDACTED:PRIVATE-KEY]` | **0** | ✅ |
 | 邮箱 `x@y.z` | **0** | ✅（不含个人邮箱） |

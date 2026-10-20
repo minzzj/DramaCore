@@ -11,7 +11,7 @@
   - 路径：GitHub → Settings → Developer settings → Personal access tokens → **Tokens (classic)** → Generate new token；
   - 勾选 **repo**（公开/私有仓库都需要）；
   - 有效期建议 7 天，**发布完成后立刻 Revoke**；
-  - 把 `ghp_REDACTED...` 发我（我只会用于本次 clone/push，不写入任何文件/不走日志）。
+  - 把 `ghp_REDACTEDREDACTED...` 发我（我只会用于本次 clone/push，不写入任何文件/不走日志）。
 - 同时建议：**改掉刚在对话中发过的账号密码并开启 2FA**（我不会使用该密码）。
 - 如果不想给 token：也可以你先在 GitHub 建好空仓库并把仓库地址+默认分支告诉我，我再给你一个**打包好的 zip + 逐条 git 命令**，由你本机执行推送（但今晚无法自动完成推送）。
 
@@ -43,7 +43,7 @@
 
 ## 五、需要你睡前回复的 3 件事
 
-1. **GitHub PAT**（`ghp_REDACTED...`，repo 权限；或告诉我"你自己建仓库+本机推送"）；
+1. **GitHub PAT**（`ghp_REDACTEDREDACTED...`，repo 权限；或告诉我"你自己建仓库+本机推送"）；
 2. 仓库名与可见性：例如 `DramaCore` / **Public**（内测版建议 Public 防抢发）；
 3. 许可证确认：**AGPL-3.0 + Commons Clause**（推荐）还是其他。
 
