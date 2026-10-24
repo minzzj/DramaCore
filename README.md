@@ -73,7 +73,7 @@
 
 ![导演台 / V3 提示词面板](docs/images/director-panel-v3.png)
 
-![GitHub 仓库主页](docs/images/repo-main.png)
+![GitHub 仓库验证](docs/images/github-api-verify.png)
 
 ## 文档
 
