@@ -83,3 +83,9 @@
 - [面板配置说明](docs/剧核_DramaCore_面板配置说明.md)
 - [发布说明 v0.2.0](docs/发布说明_v0.2.0-internal.md)
 - [更新日志](CHANGELOG.md)
+
+## 宣传片
+
+🎬 [剧核 DramaCore 宣传片（68 秒，BGM 版 / 静音版）](https://github.com/minzzj/DramaCore/releases/tag/v0.2.0-internal)
+
+![宣传片封面](docs/images/promo-poster.jpg)
