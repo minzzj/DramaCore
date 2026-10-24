@@ -1,0 +1,2034 @@
+{
+  "id": "00000000-0000-0000-0000-000000000000",
+  "revision": 0,
+  "last_node_id": 1,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BetterComfyUIOneStop",
+      "pos": [
+        10,
+        10
+      ],
+      "size": [
+        1200,
+        2846
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "showAdvanced": null,
+      "inputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "剧本",
+          "locked": null,
+          "name": "剧本",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "剧本"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "项目",
+          "locked": null,
+          "name": "项目",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "项目"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "输出文件名",
+          "locked": null,
+          "name": "输出文件名",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "输出文件名"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "视频UNET",
+          "locked": null,
+          "name": "视频UNET",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "视频UNET"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "CLIP名",
+          "locked": null,
+          "name": "CLIP名",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "CLIP名"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "视频VAE",
+          "locked": null,
+          "name": "视频VAE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "视频VAE"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "音频VAE",
+          "locked": null,
+          "name": "音频VAE",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "音频VAE"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "视频LoRA",
+          "locked": null,
+          "name": "视频LoRA",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "视频LoRA"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "LoRA强度",
+          "locked": null,
+          "name": "LoRA强度",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "LoRA强度"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "图像模型",
+          "locked": null,
+          "name": "图像模型",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "图像模型"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "生成素材图",
+          "locked": null,
+          "name": "生成素材图",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "生成素材图"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "素材最多生成个数",
+          "locked": null,
+          "name": "素材最多生成个数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "素材最多生成个数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "素材审核轮数",
+          "locked": null,
+          "name": "素材审核轮数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "素材审核轮数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "素材审核模式",
+          "locked": null,
+          "name": "素材审核模式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "素材审核模式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "素材审核阈值",
+          "locked": null,
+          "name": "素材审核阈值",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "素材审核阈值"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "复用已锁定素材",
+          "locked": null,
+          "name": "复用已锁定素材",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "复用已锁定素材"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "图像分辨率",
+          "locked": null,
+          "name": "图像分辨率",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "图像分辨率"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "图像步数",
+          "locked": null,
+          "name": "图像步数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "图像步数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "图像CFG",
+          "locked": null,
+          "name": "图像CFG",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "图像CFG"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "任务类型",
+          "locked": null,
+          "name": "任务类型",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "任务类型"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "编辑模式",
+          "locked": null,
+          "name": "编辑模式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "编辑模式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "时间轴JSON",
+          "locked": null,
+          "name": "时间轴JSON",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "时间轴JSON"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "首帧图片路径",
+          "locked": null,
+          "name": "首帧图片路径",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "首帧图片路径"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "尾帧图片路径",
+          "locked": null,
+          "name": "尾帧图片路径",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "尾帧图片路径"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "源视频路径",
+          "locked": null,
+          "name": "源视频路径",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "源视频路径"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "参考视频路径",
+          "locked": null,
+          "name": "参考视频路径",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "参考视频路径"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "参考音频路径",
+          "locked": null,
+          "name": "参考音频路径",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "参考音频路径"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "每段时长_秒",
+          "locked": null,
+          "name": "每段时长_秒",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "每段时长_秒"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "段数",
+          "locked": null,
+          "name": "段数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "段数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "目标总时长_分钟",
+          "locked": null,
+          "name": "目标总时长_分钟",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "目标总时长_分钟"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "每批段数",
+          "locked": null,
+          "name": "每批段数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "每批段数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "断点续跑",
+          "locked": null,
+          "name": "断点续跑",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "断点续跑"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "批次间卸载模型",
+          "locked": null,
+          "name": "批次间卸载模型",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "批次间卸载模型"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "帧率",
+          "locked": null,
+          "name": "帧率",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "帧率"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "宽度",
+          "locked": null,
+          "name": "宽度",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "宽度"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "高度",
+          "locked": null,
+          "name": "高度",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "高度"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "参考最长边",
+          "locked": null,
+          "name": "参考最长边",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "参考最长边"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "步数",
+          "locked": null,
+          "name": "步数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "步数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "采样器",
+          "locked": null,
+          "name": "采样器",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "采样器"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "调度器",
+          "locked": null,
+          "name": "调度器",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "调度器"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "cfg",
+          "locked": null,
+          "name": "cfg",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "cfg"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "seed",
+          "locked": null,
+          "name": "seed",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "seed"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "噪声偏移_视频",
+          "locked": null,
+          "name": "噪声偏移_视频",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "噪声偏移_视频"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "噪声偏移_音频",
+          "locked": null,
+          "name": "噪声偏移_音频",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "噪声偏移_音频"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "段间连续",
+          "locked": null,
+          "name": "段间连续",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "段间连续"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "连续帧数",
+          "locked": null,
+          "name": "连续帧数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "连续帧数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "连续模式",
+          "locked": null,
+          "name": "连续模式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "连续模式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "重绘幅度",
+          "locked": null,
+          "name": "重绘幅度",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "重绘幅度"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "保完整尾部",
+          "locked": null,
+          "name": "保完整尾部",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "保完整尾部"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "每段引用上段",
+          "locked": null,
+          "name": "每段引用上段",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "每段引用上段"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "音频上下文帧数",
+          "locked": null,
+          "name": "音频上下文帧数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "音频上下文帧数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "显存档位",
+          "locked": null,
+          "name": "显存档位",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "显存档位"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "剪枝模型",
+          "locked": null,
+          "name": "剪枝模型",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "剪枝模型"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "tiled采样",
+          "locked": null,
+          "name": "tiled采样",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "tiled采样"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "显存清理_段间",
+          "locked": null,
+          "name": "显存清理_段间",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "显存清理_段间"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "显存清理_二采前",
+          "locked": null,
+          "name": "显存清理_二采前",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "显存清理_二采前"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "显存清理_修脸前",
+          "locked": null,
+          "name": "显存清理_修脸前",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "显存清理_修脸前"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "缓存编码",
+          "locked": null,
+          "name": "缓存编码",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "缓存编码"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "缓存目录名",
+          "locked": null,
+          "name": "缓存目录名",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "缓存目录名"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "音频模式",
+          "locked": null,
+          "name": "音频模式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "音频模式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "导出原始帧",
+          "locked": null,
+          "name": "导出原始帧",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "导出原始帧"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "输出修脸前",
+          "locked": null,
+          "name": "输出修脸前",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "输出修脸前"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "启用SelfLift",
+          "locked": null,
+          "name": "启用SelfLift",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "启用SelfLift"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "SelfLift高分步数",
+          "locked": null,
+          "name": "SelfLift高分步数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "SelfLift高分步数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "SelfLift低分比例",
+          "locked": null,
+          "name": "SelfLift低分比例",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "SelfLift低分比例"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "SelfLift过渡步",
+          "locked": null,
+          "name": "SelfLift过渡步",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "SelfLift过渡步"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "启用Refine",
+          "locked": null,
+          "name": "启用Refine",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "启用Refine"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "Refine模式",
+          "locked": null,
+          "name": "Refine模式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "Refine模式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "Refine次数",
+          "locked": null,
+          "name": "Refine次数",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "Refine次数"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "Refine目标百万像素",
+          "locked": null,
+          "name": "Refine目标百万像素",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "Refine目标百万像素"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "Refine放大方式",
+          "locked": null,
+          "name": "Refine放大方式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "Refine放大方式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "启用FaceRefine",
+          "locked": null,
+          "name": "启用FaceRefine",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "启用FaceRefine"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "人脸检测器",
+          "locked": null,
+          "name": "人脸检测器",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "人脸检测器"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "修脸重绘幅度",
+          "locked": null,
+          "name": "修脸重绘幅度",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "修脸重绘幅度"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "启用SemanticBridge",
+          "locked": null,
+          "name": "启用SemanticBridge",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "启用SemanticBridge"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "语义桥适配器",
+          "locked": null,
+          "name": "语义桥适配器",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "语义桥适配器"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "语义桥alpha",
+          "locked": null,
+          "name": "语义桥alpha",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "语义桥alpha"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "走Finalize剪辑",
+          "locked": null,
+          "name": "走Finalize剪辑",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "走Finalize剪辑"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "剪辑CRF",
+          "locked": null,
+          "name": "剪辑CRF",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "剪辑CRF"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "转场",
+          "locked": null,
+          "name": "转场",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "转场"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "字幕",
+          "locked": null,
+          "name": "字幕",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "字幕"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "水印",
+          "locked": null,
+          "name": "水印",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "水印"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "水印文字",
+          "locked": null,
+          "name": "水印文字",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "水印文字"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "封面帧",
+          "locked": null,
+          "name": "封面帧",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "封面帧"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "输出格式",
+          "locked": null,
+          "name": "输出格式",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "输出格式"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "系统提示词选择",
+          "locked": null,
+          "name": "系统提示词选择",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "系统提示词选择"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "自定义系统提示词",
+          "locked": null,
+          "name": "自定义系统提示词",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "widget": {
+            "name": "自定义系统提示词"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "输出语言",
+          "locked": null,
+          "name": "输出语言",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "输出语言"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "分镜粒度",
+          "locked": null,
+          "name": "分镜粒度",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "分镜粒度"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "使用占位结果",
+          "locked": null,
+          "name": "使用占位结果",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "使用占位结果"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "审核阈值",
+          "locked": null,
+          "name": "审核阈值",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "审核阈值"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "段阈值覆盖",
+          "locked": null,
+          "name": "段阈值覆盖",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "段阈值覆盖"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "整片阈值覆盖",
+          "locked": null,
+          "name": "整片阈值覆盖",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "整片阈值覆盖"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "整片失败策略",
+          "locked": null,
+          "name": "整片失败策略",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "COMBO",
+          "widget": {
+            "name": "整片失败策略"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "边界相似度阈值",
+          "locked": null,
+          "name": "边界相似度阈值",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "FLOAT",
+          "widget": {
+            "name": "边界相似度阈值"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "自动返工",
+          "locked": null,
+          "name": "自动返工",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "自动返工"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "CNT2上限",
+          "locked": null,
+          "name": "CNT2上限",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "CNT2上限"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "级联返工",
+          "locked": null,
+          "name": "级联返工",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "级联返工"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "CNT3上限",
+          "locked": null,
+          "name": "CNT3上限",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "INT",
+          "widget": {
+            "name": "CNT3上限"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "api_key",
+          "locked": null,
+          "name": "api_key",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "api_key"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "model",
+          "locked": null,
+          "name": "model",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "model"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "api_base",
+          "locked": null,
+          "name": "api_base",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "api_base"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "统一风格",
+          "locked": null,
+          "name": "统一风格",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "STRING",
+          "widget": {
+            "name": "统一风格"
+          },
+          "link": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "出片",
+          "locked": null,
+          "name": "出片",
+          "nameLocked": null,
+          "removable": null,
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "出片"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "成片路径",
+          "locked": null,
+          "name": "成片路径",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "审核报告",
+          "locked": null,
+          "name": "审核报告",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "提示词JSON",
+          "locked": null,
+          "name": "提示词JSON",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "审计报告",
+          "locked": null,
+          "name": "审计报告",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "时间轴JSON",
+          "locked": null,
+          "name": "时间轴JSON",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        },
+        {
+          "color_off": null,
+          "color_on": null,
+          "dir": null,
+          "label": null,
+          "localized_name": "导演台报告",
+          "locked": null,
+          "name": "导演台报告",
+          "nameLocked": null,
+          "removable": null,
+          "shape": null,
+          "type": "STRING",
+          "pos": null,
+          "slot_index": null,
+          "links": null
+        }
+      ],
+      "title": "剧核单节点（剧本→成片｜全流程）",
+      "properties": {
+        "Node name for S&R": "BetterComfyUIOneStop"
+      },
+      "widgets_values": [
+        "第一章 雪夜\n林秀在雪夜推门走进客栈，老陈抬头看她，两人对视。\n林秀在桌边坐下，窗外雪落无声，灯影摇曳。",
+        "",
+        "---",
+        "",
+        "剧核试用",
+        "大节点成片.mp4",
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax_h3_video_vae_fp16.safetensors",
+        "minimax_h3_audio_vae_fp32.safetensors",
+        null,
+        "",
+        0.75,
+        "",
+        true,
+        12,
+        3,
+        "模型审核（本地启发式）",
+        -1,
+        true,
+        1024,
+        20,
+        null,
+        6,
+        "r2v — 参考主体生视频(Reference to Video)",
+        "自动（按任务类型）",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        10,
+        "AI自动（按剧情，推荐）",
+        1,
+        0,
+        8,
+        true,
+        true,
+        24,
+        1920,
+        1088,
+        864,
+        6,
+        "euler",
+        "simple",
+        1,
+        0,
+        "randomize",
+        12,
+        3,
+        true,
+        22,
+        "guide 引导（官方 motion context）",
+        0.1,
+        true,
+        true,
+        24,
+        "自动",
+        true,
+        0,
+        64,
+        true,
+        false,
+        false,
+        "raw",
+        "",
+        "generate 生成（原生音画）",
+        false,
+        false,
+        false,
+        8,
+        0.5,
+        2,
+        false,
+        "refine 同尺寸二采",
+        1,
+        2,
+        "h3_latent",
+        false,
+        "face_yolov8m.pt",
+        0.4,
+        false,
+        "",
+        0.15,
+        null,
+        true,
+        18,
+        "AI自动（按剧情）",
+        0.5,
+        "无",
+        "剧核 DramaCore",
+        "剧终",
+        "剧核 DramaCore 出品",
+        "",
+        "硬字幕（程序对齐）",
+        "无",
+        "剧核 DramaCore",
+        "第一帧",
+        "mp4（H.264）",
+        "跟随面板配置（推荐）",
+        "",
+        "中文",
+        "按镜头",
+        false,
+        null,
+        70,
+        -1,
+        -1,
+        "按项目配置",
+        55,
+        true,
+        3,
+        true,
+        3,
+        "",
+        "",
+        "",
+        "电影感，真实自然，明亮通透，冷暖并行，自然光，正常饱和",
+        true
+      ]
+    }
+  ],
+  "links": [],
+  "floatingLinks": null,
+  "groups": [],
+  "definitions": null,
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.9,
+      "offset": [
+        416,
+        110
+      ]
+    },
+    "reroutes": null
+  },
+  "version": 0.4
+}

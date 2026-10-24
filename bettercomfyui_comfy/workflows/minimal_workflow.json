@@ -1,0 +1,273 @@
+{
+  "id": "bettercomfyui-minimal",
+  "revision": 0,
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BetterComfyUIProject",
+      "pos": [
+        40,
+        160
+      ],
+      "size": [
+        380,
+        170
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "action",
+          "type": "COMBO",
+          "widget": {
+            "name": "action"
+          },
+          "link": null
+        },
+        {
+          "name": "project_name",
+          "type": "STRING",
+          "widget": {
+            "name": "project_name"
+          },
+          "link": null
+        },
+        {
+          "name": "project_id",
+          "type": "STRING",
+          "widget": {
+            "name": "project_id"
+          },
+          "link": null
+        },
+        {
+          "name": "confirm_delete",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "confirm_delete"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "project_id",
+          "type": "STRING",
+          "links": [
+            1
+          ]
+        },
+        {
+          "name": "info",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BetterComfyUIProject"
+      },
+      "title": "1. 项目（选择或创建）",
+      "widgets_values": [
+        "打开或创建",
+        "我的短剧",
+        "",
+        false
+      ]
+    },
+    {
+      "id": 2,
+      "type": "BetterComfyUIRun",
+      "pos": [
+        500,
+        160
+      ],
+      "size": [
+        560,
+        330
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "project_id",
+          "type": "STRING",
+          "widget": {
+            "name": "project_id"
+          },
+          "link": 1
+        },
+        {
+          "name": "script_text",
+          "type": "STRING",
+          "widget": {
+            "name": "script_text"
+          },
+          "link": null
+        },
+        {
+          "name": "review_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "review_mode"
+          },
+          "link": null
+        },
+        {
+          "name": "asset_review_mode",
+          "type": "COMBO",
+          "widget": {
+            "name": "asset_review_mode"
+          },
+          "link": null
+        },
+        {
+          "name": "executor",
+          "type": "COMBO",
+          "widget": {
+            "name": "executor"
+          },
+          "link": null
+        },
+        {
+          "name": "max_segments",
+          "shape": 7,
+          "type": "INT",
+          "widget": {
+            "name": "max_segments"
+          },
+          "link": null
+        },
+        {
+          "name": "enable_cascade",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "enable_cascade"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "output_path",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "links": [
+            2
+          ]
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BetterComfyUIRun"
+      },
+      "title": "2. 一键运行（剧本 → 素材 → 视频段 → 审核 → 拼接）",
+      "widgets_values": [
+        "",
+        "{\n  \"script_id\": \"minimal\",\n  \"chapters\": [\n    {\n      \"title\": \"第一章 · 雨夜\",\n      \"assets\": [\n        {\n          \"id\": \"c1\",\n          \"type\": \"CHARACTER\",\n          \"name\": \"林澈\",\n          \"prompt\": \"年轻女性剑客，青色长袍，神情冷峻\"\n        },\n        {\n          \"id\": \"s1\",\n          \"type\": \"SCENE\",\n          \"name\": \"雨夜天台\",\n          \"prompt\": \"深夜城市天台，暴雨，霓虹反光，电影感冷色调\"\n        }\n      ],\n      \"segments\": [\n        {\n          \"prompt\": \"林澈走上雨夜天台，镜头从背后缓慢推近\",\n          \"asset_refs\": [\n            \"c1\",\n            \"s1\"\n          ],\n          \"duration_s\": 3\n        },\n        {\n          \"prompt\": \"她抬头望向远处城市灯火，雨滴在霓虹下成为光斑，特写\",\n          \"asset_refs\": [\n            \"c1\",\n            \"s1\"\n          ],\n          \"duration_s\": 3\n        }\n      ]\n    }\n  ]\n}",
+        "MODEL",
+        "MODEL",
+        "占位媒体(mock)",
+        3,
+        true
+      ]
+    },
+    {
+      "id": 3,
+      "type": "BetterComfyUIResult",
+      "pos": [
+        1120,
+        160
+      ],
+      "size": [
+        400,
+        130
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "report_json",
+          "type": "STRING",
+          "widget": {
+            "name": "report_json"
+          },
+          "link": 2
+        },
+        {
+          "name": "open_output_folder",
+          "shape": 7,
+          "type": "BOOLEAN",
+          "widget": {
+            "name": "open_output_folder"
+          },
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "status",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "output_path",
+          "type": "STRING",
+          "links": null
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "BetterComfyUIResult"
+      },
+      "title": "3. 结果（状态 + 成片路径）",
+      "widgets_values": [
+        "",
+        false
+      ]
+    }
+  ],
+  "links": [
+    [
+      1,
+      1,
+      0,
+      2,
+      0,
+      "STRING"
+    ],
+    [
+      2,
+      2,
+      2,
+      3,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.85,
+      "offset": [
+        60,
+        40
+      ]
+    }
+  },
+  "version": 0.4
+}

@@ -1,0 +1,674 @@
+{
+  "id": "bcu-one-director",
+  "revision": 0,
+  "last_node_id": 73,
+  "last_link_id": 44,
+  "nodes": [
+    {
+      "id": 41,
+      "type": "UNETLoader",
+      "pos": [
+        560,
+        60
+      ],
+      "size": [
+        300,
+        140
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "default"
+      ],
+      "title": "① 扩散模型（ref2va）"
+    },
+    {
+      "id": 42,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        840,
+        60
+      ],
+      "size": [
+        300,
+        140
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors",
+        0.75
+      ],
+      "title": "② turbo LoRA"
+    },
+    {
+      "id": 43,
+      "type": "CLIPLoader",
+      "pos": [
+        560,
+        260
+      ],
+      "size": [
+        300,
+        160
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            3
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax",
+        "default"
+      ],
+      "title": "③ 文本编码器"
+    },
+    {
+      "id": 44,
+      "type": "VAELoader",
+      "pos": [
+        560,
+        460
+      ],
+      "size": [
+        300,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_video_vae_fp16.safetensors"
+      ],
+      "title": "④ 视频 VAE"
+    },
+    {
+      "id": 45,
+      "type": "VAELoader",
+      "pos": [
+        840,
+        460
+      ],
+      "size": [
+        300,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            5
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "title": "⑤ 音频 VAE"
+    },
+    {
+      "id": 46,
+      "type": "MiniMaxH3Director",
+      "pos": [
+        200,
+        100
+      ],
+      "size": [
+        300,
+        600
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 4
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 5
+        },
+        {
+          "name": "r2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": 41
+        },
+        {
+          "name": "r2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            7
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            8
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            9
+          ],
+          "slot_index": 2
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": [],
+          "slot_index": 3
+        },
+        {
+          "name": "source_images",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 4
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 5
+        },
+        {
+          "name": "images_pre_refine",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 6
+        },
+        {
+          "name": "images_pre_face_refine",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 7
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3Director"
+      },
+      "widgets_values": [
+        "r2v",
+        "A cinematic scene with natural motion and synchronized ambience",
+        "采样设置",
+        1.0,
+        0,
+        24.0,
+        864,
+        480,
+        864,
+        124,
+        "",
+        "高级采样",
+        25,
+        "euler",
+        "simple",
+        12.0,
+        3.0,
+        "性能",
+        true,
+        false,
+        false,
+        "raw",
+        false,
+        false,
+        ""
+      ],
+      "title": "⑥ MiniMaxH3Director（巨人：真实出片）"
+    },
+    {
+      "id": 47,
+      "type": "CreateVideo",
+      "pos": [
+        1500,
+        60
+      ],
+      "size": [
+        300,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 8
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            10
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30.0,
+        "auto",
+        "sRGB",
+        "none"
+      ],
+      "title": "⑦ 合成视频"
+    },
+    {
+      "id": 48,
+      "type": "SaveVideo",
+      "pos": [
+        1500,
+        300
+      ],
+      "size": [
+        300,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "BetterComfyUI/一体化"
+      ],
+      "title": "⑧ 保存成片"
+    },
+    {
+      "id": 70,
+      "type": "BetterComfyUIEverything",
+      "pos": [
+        -1700,
+        120
+      ],
+      "size": [
+        520,
+        640
+      ],
+      "flags": {},
+      "order": 70,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "out0",
+          "type": "MMX_DIR_GROUP",
+          "links": [
+            41
+          ]
+        },
+        {
+          "name": "out1",
+          "type": "STRING",
+          "links": []
+        },
+        {
+          "name": "out2",
+          "type": "STRING",
+          "links": [
+            42
+          ]
+        },
+        {
+          "name": "out3",
+          "type": "STRING",
+          "links": [
+            43
+          ]
+        },
+        {
+          "name": "out4",
+          "type": "STRING",
+          "links": [
+            44
+          ]
+        }
+      ],
+      "properties": {},
+      "widgets_values": [
+        "第一章 雪夜\n林秀在雪夜推门走进客栈，老陈抬头看她，两人对视。\n林秀在桌边坐下，窗外雪落无声，灯影摇曳。",
+        "默认（影视拆解，推荐）",
+        "",
+        "@冷蓝电影光",
+        "电影感，真实自然，明亮通透，冷暖并行，自然光，正常饱和",
+        "中文",
+        "按镜头",
+        "我的短剧",
+        true,
+        10.0,
+        0,
+        "1080P",
+        24,
+        true,
+        "角色>场景>物品>分镜（推荐）",
+        "",
+        "整个素材库（推荐）",
+        "模型审核",
+        70,
+        "自动（导演台尾部帧辅助，推荐）",
+        false,
+        "",
+        "",
+        ""
+      ]
+    },
+    {
+      "id": 71,
+      "type": "PreviewAny",
+      "pos": [
+        -900,
+        120
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 71,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 42
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "提示词JSON（E1–E5 + 素材库统计）"
+    },
+    {
+      "id": 72,
+      "type": "PreviewAny",
+      "pos": [
+        -900,
+        420
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 72,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 43
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "素材清单（登记/复用/LOCK）"
+    },
+    {
+      "id": 73,
+      "type": "PreviewAny",
+      "pos": [
+        -900,
+        720
+      ],
+      "size": [
+        520,
+        260
+      ],
+      "flags": {},
+      "order": 73,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "source",
+          "type": "STRING",
+          "link": 44
+        }
+      ],
+      "outputs": [],
+      "properties": {},
+      "widgets_values": [],
+      "title": "审计报告（API 调用次数/模式）"
+    }
+  ],
+  "links": [
+    [
+      1,
+      41,
+      0,
+      42,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      42,
+      0,
+      46,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      43,
+      0,
+      46,
+      1,
+      "CLIP"
+    ],
+    [
+      4,
+      44,
+      0,
+      46,
+      2,
+      "VAE"
+    ],
+    [
+      5,
+      45,
+      0,
+      46,
+      3,
+      "VAE"
+    ],
+    [
+      7,
+      46,
+      0,
+      47,
+      0,
+      "IMAGE"
+    ],
+    [
+      8,
+      46,
+      1,
+      47,
+      1,
+      "AUDIO"
+    ],
+    [
+      9,
+      46,
+      2,
+      47,
+      2,
+      "FLOAT"
+    ],
+    [
+      10,
+      47,
+      0,
+      48,
+      0,
+      "VIDEO"
+    ],
+    [
+      41,
+      70,
+      0,
+      46,
+      4,
+      "MMX_DIR_GROUP"
+    ],
+    [
+      42,
+      70,
+      2,
+      71,
+      0,
+      "STRING"
+    ],
+    [
+      43,
+      70,
+      3,
+      72,
+      0,
+      "STRING"
+    ],
+    [
+      44,
+      70,
+      4,
+      73,
+      0,
+      "STRING"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "note": "【完整逻辑图全流程 W0】\nSG7 全局配置 -> APIConfig（输出接到剧本节点的 api_key/model/api_base）\nSG1 剧本→镜头提示词 -> 剧本节点 -> 提示词桥接\nSG2 素材库 -> AssetSlots（已 LOCK 素材 -> IMAGE）\nSG4 一体化导演台 -> 导演组\nSG4 真实导演台 -> 合成 -> 出片\n\n使用：① 在 ComfyUI 原生「设置 → StoryBoard」或 APIConfig 面板填 DeepSeek 密钥；② 把剧本节点的「使用占位结果」改成 False 走真实模型；③ 点队列。"
+  },
+  "version": 0.4
+}

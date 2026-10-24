@@ -1,0 +1,44 @@
+{
+  "last_node_id": 1,
+  "last_link_id": 0,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "BetterComfyUIOneDirector",
+      "pos": [
+        120,
+        140
+      ],
+      "size": [
+        300,
+        260
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "Node name for S&R": "BetterComfyUIOneDirector"
+      },
+      "widgets_values": [
+        "镜头1｜主角推开木门走进房间，镜头缓慢推进。\n---\n镜头2｜主角在桌前坐下，抬头看向窗外。\n---\n镜头3｜镜头拉远，画面定格。",
+        "默认项目",
+        "# 只给指定段用的素材：名字 = asset_id@version\n# 段文本里写 @名字 才会挂上；公共素材库不需要写在这里\n",
+        10.0,
+        "电影感，真实自然，明亮通透，冷暖并行，自然光，正常饱和",
+        "自动（导演台尾部帧辅助，推荐）",
+        "角色>场景>物品>分镜（推荐）",
+        "整个素材库（推荐）"
+      ],
+      "title": "★ 一体化导演台（剧本 + 素材 → 整条导演组）"
+    }
+  ],
+  "links": [],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "note": "最简单入门：只有一体化导演台。把「导演组」输出接到 MiniMaxH3Director 的 r2v_groups 即可出片。"
+  },
+  "version": 0.4
+}

@@ -1,0 +1,110 @@
+prompt:
+  model_provider: external_api
+  output_language: zh
+  output_format: json
+  story_granularity: shot
+  system_prompt_template: h3_v3_contract
+  inject_existing_assets: true
+  normalize_names: true
+  endpoint: null
+  api_key: null
+  model_name: null
+  timeout_s: 120.0
+  api_key_env: null
+  max_retries: 2
+  retry_backoff_s: 0.5
+  max_tokens: 8192
+  extra_headers: {}
+  custom_request_template:
+    model: '{model}'
+    messages:
+    - role: system
+      content: '{system}'
+    - role: user
+      content: '{user}'
+    stream: false
+  custom_response_path: choices.0.message.content
+  custom_response_template: null
+assets:
+  resolution: 1024
+  steps: 25
+  sampler: DPM++ 2M Karras
+  cfg: 7.0
+  seed: -1
+  batch_count: 4
+  per_class_limit: 9
+asset_review:
+  default_mode: MODEL
+  human_timeout_minutes: 10
+  timeout_pause_on_active_op: true
+  model_candidate_limit: 3
+  score_threshold: 70.0
+  score_dimensions:
+  - 画质
+  - 一致性
+  - 合规
+  - 构图
+  on_timeout: switch_to_model
+  new_version_requires_review: true
+  fallback: highest_of_candidates
+  notify_channels:
+  - popup
+  - sound
+  retry_interval: immediate
+director:
+  segment_seconds: 10
+  resolution: 1080P
+  fps: 24
+  tail_frames: 22
+  first_frame: first
+  last_frame: last
+  vram_tier: auto
+  pruned_model: true
+  reference_mode: auto
+  save_vram_all: true
+  vram_budget_gb: 0.0
+video_review:
+  audit_scope: both
+  threshold_segment: 70.0
+  threshold_full: 70.0
+  r1a_dimensions:
+  - 画面连贯
+  - 角色一致
+  - 动作合理
+  - 无闪烁
+  r1b_dimensions:
+  - 叙事流畅
+  - 音画同步
+  - 节奏合理
+  - 无明显跳变
+  cnt2_limit: 3
+  cnt3_limit: 3
+  regenerate_granularity: segment
+  rework_prompt_augment: both
+  cascade_mark_enabled: true
+  max_cascade_depth: 8
+  full_review_policy: null
+encode:
+  audio_join: auto
+  transition: none
+  subtitle: false
+  watermark: false
+  format: MP4
+  codec: H.264
+  crf: 18
+  cover: first_frame
+  bgm_volume: 0.35
+  bgm_loop: true
+  bgm_fade: 1.0
+  bgm_ducking: false
+global:
+  log_level: INFO
+  log_all_manual_and_auto_switch: true
+  tech_retry_limit: 3
+  task_timeout_s: 900.0
+  checkpoint_every_stage: true
+  config_import_export: true
+  project_root: projects
+  max_notify_retries: 2
+  comfyui_base_path: ''
+  comfyui_endpoint: ''

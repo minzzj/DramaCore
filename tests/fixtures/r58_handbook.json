@@ -1,0 +1,26 @@
+{
+  "task_type": "T2VA",
+  "video_prompt": "integrated_multimodal_description: [Shot 1] Live-action, cinematic, a young swordsman in white robes walks alone down a snowy street at night. overall_soundscape: Wind howls across the empty street. non_diegetic_music: Low sustained strings at a slow tempo.",
+  "material_image_prompts": [
+    {
+      "type": "人物图",
+      "prompt": "Chinese young swordsman, early 20s, long black hair tied up, white linen robe with dark sash, cinematic portrait, medium shot, cold moonlight key light",
+      "negative_prompt": "blurry, low quality, extra fingers, watermark, text"
+    },
+    {
+      "type": "场景图",
+      "prompt": "Ancient Chinese street at night under heavy snow, stone-paved road, red lanterns, cold blue moonlight, cinematic wide shot",
+      "negative_prompt": "blurry, watermark, text"
+    }
+  ],
+  "character_sheet": [
+    {
+      "speaker_id": "S1",
+      "name": "林澈",
+      "appearance": "young swordsman, long black hair tied up",
+      "costume": "white linen robe with dark sash",
+      "voice": "low, restrained"
+    }
+  ],
+  "notes": "需要一张人物图与一张场景图；首帧使用场景图"
+}

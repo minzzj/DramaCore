@@ -1,0 +1,37 @@
+{
+  "title": "雪夜长街",
+  "chapters": [
+    {
+      "chapter_id": "CH001",
+      "title": "雪夜",
+      "summary": "林澈独行雪夜长街，忽闻身后剑鸣。",
+      "segments": [
+        {
+          "segment_index": 1,
+          "prompt": "integrated_multimodal_description: [Shot 1] Live-action, cinematic, a young swordsman in white robes walks alone down a snowy street at night; the camera tracks behind him at slow speed. [Shot 2] At 00:04.000, the shot cuts to a close-up of his hand gripping the sword hilt. overall_soundscape: Wind howls across the empty street with soft crunching footsteps in snow. non_diegetic_music: Low sustained strings at a slow tempo, gradually rising.",
+          "asset_refs": ["A1", "A2"],
+          "duration_s": 10,
+          "first_frame_ref": "A2"
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "A1",
+      "asset_type": "CHARACTER",
+      "name": "林澈",
+      "prompt": "Chinese young swordsman, early 20s, long black hair tied up, white linen robe with dark sash, calm cold expression, cinematic portrait, medium shot, eye-level, cold moonlight key light, ultra detailed, photorealistic",
+      "negative_prompt": "blurry, low quality, extra fingers, watermark, text",
+      "source": "AI",
+      "library_scope": "PROJECT"
+    },
+    {
+      "id": "A2",
+      "asset_type": "SCENE",
+      "name": "雪夜长街",
+      "prompt": "Ancient Chinese street at night under heavy snow, stone-paved road, red lanterns, closed wooden shopfronts, cold blue moonlight, cinematic wide shot, no people",
+      "negative_prompt": "blurry, watermark, text, oversaturated"
+    }
+  ]
+}

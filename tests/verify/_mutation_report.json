@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-10-16T23:21:46.385961+08:00",
+  "total": 3,
+  "killed": 2,
+  "survived": 1,
+  "other": [],
+  "results": [
+    {
+      "id": "M001",
+      "file": "bettercomfyui/store/assets.py",
+      "test": "tests/verify/test_acceptance_05_version_and_hash.py",
+      "note": "验收 5：版本号必须递增（改成恒为 v1，追加版本测试必须变红）",
+      "result": "KILLED",
+      "detail": "2 failed, 2 passed in 0.34s",
+      "baseline_rc": 0
+    },
+    {
+      "id": "M002",
+      "file": "bettercomfyui/prompt/match.py",
+      "test": "tests/verify/test_acceptance_03_injection_and_reuse.py",
+      "note": "验收 3：不存在必须 NEW_GENERATE（改成 EXISTS_REUSE，复用/新增分支测试必须变红）",
+      "result": "KILLED",
+      "detail": "1 failed, 5 passed in 0.42s",
+      "baseline_rc": 0
+    },
+    {
+      "id": "M003",
+      "file": "bettercomfyui/store/atomic.py",
+      "test": "tests/verify/test_contracts_parity.py",
+      "note": "C12：canonical_json 键序确定性（改坏排序，契约检查必须变红）",
+      "result": "SURVIVED",
+      "detail": "改坏实现后测试仍然全绿 —— 该测试没有真正覆盖 bettercomfyui/store/atomic.py 的这条逻辑。输出尾部：.....                                                                    [100%]\n[verify] ��̬���ۣ�ͨ��=5 ʧ��=0 δ��֤=0\n[verify] ��ϸ��C:\\Users\\Administrator\\AppData\\Local\\Temp\\bcui_mut_cmcaftaj\\repo\\tests\\verify\\_last_run.json\n\n5 passed in 1.73s\n",
+      "baseline_rc": 0
+    }
+  ]
+}

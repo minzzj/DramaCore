@@ -1,0 +1,27 @@
+# 剧核 DramaCore — 用户配置示例
+# 复制本文件为 config/user.yaml 后填写；config/user.yaml 已被 .gitignore 排除，禁止提交。
+# ⚠️ 本文件不含任何真实密钥；请勿把 token/key 写进仓库或工作流。
+global:
+  comfyui_base_path: ./.comfyui
+  comfyui_endpoint: http://127.0.0.1:8188
+
+prompt:
+  endpoint: https://api.deepseek.com
+  model_name: deepseek-chat
+  api_key: ''            # 在这里或 ComfyUI 面板里填写；不要提交真实 Key
+  output_language: zh
+  output_format: json
+  story_granularity: shot
+  # 默认系统提示词：V3.0 契约对齐（唯一提示词）
+  system_prompt_template: h3_v3_contract
+  inject_existing_assets: true
+  normalize_names: true
+  max_tokens: null
+  timeout_s: 120.0
+  max_retries: 2
+  retry_backoff_s: 0.5
+
+# 说明：
+# 1) 节点「统一风格」默认值是示例风格（电影感，真实自然，自然光影，正常曝光，场景自适应），
+#    请按你的项目自行修改或替换。
+# 2) 系统提示词 V3.0 的 PART C · C1 风格锁为示例模板，部署前请按项目替换。

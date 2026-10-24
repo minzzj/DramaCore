@@ -1,0 +1,713 @@
+MiniMax H3 视频生成提示词工程手册
+面向「剧核」项目：DeepSeek 剧本转提示词工作流 · 素材图提示词体系 · 短剧 / 口播 / 电影全场景模板
+版本 V1.0 ｜ 2026 年 10 月 ｜ 适用模型：MiniMax H3（开源本地部署版）
+内容依据：MiniMax 官方提示词指南、模型卡、本地部署文档及社区实战验证
+目录
+1  文档说明与使用指南	1
+1.1  核心结论（先读这一节）	1
+1.2  如何使用本手册	1
+2  MiniMax H3 能力基线速览	2
+2.1  模型定位	2
+2.2  输出规格	2
+2.3  模型版本与输入规格（checkpoint）	2
+2.4  系统三模块与「自建提示词系统」的必要性	3
+2.5  本地部署要点（ComfyUI 路径）	3
+2.6  许可与合规注意	4
+3  H3 提示词核心语法（Base 模式）	4
+3.1  任务模式选择	4
+3.2  三大核心字段	4
+3.3  图像对齐指令（每种任务的首行）	5
+3.4  镜头语言词库	5
+3.5  时间戳与切镜规范	6
+3.6  说话人、对白与口型	6
+3.7  可见文字	7
+3.8  音频三分层	7
+3.9  篇幅与时长预算	7
+3.10  Base 完整模板	8
+4  全参考模式（Ref2VA）六段格式	8
+4.1  四种引用标签	8
+4.2  任务类型（summary 前缀）	8
+4.3  保留关系词汇（retention_analysis）	9
+4.4  六段结构模板	9
+4.5  规则要点	10
+5  DeepSeek 剧本转提示词工作流（核心）	10
+5.1  工作流总览	11
+5.2  DeepSeek 系统提示词（完整可复制）	11
+5.3  剧本输入格式规范	14
+5.4  输出格式约定	14
+5.5  角色一致性登记表	15
+5.6  标准操作步骤	15
+5.7  完整示例：剧本片段 → H3 提示词	15
+6  素材图提示词体系	16
+6.1  素材图四类角色	16
+6.2  素材图通用质量要求	16
+6.3  文生图提示词通用结构	17
+6.4  人物图提示词	17
+6.5  场景图提示词	18
+6.6  道具图提示词	18
+6.7  分镜图提示词	18
+6.8  光线词库	19
+6.9  风格词库	19
+6.10  负面提示词库	20
+6.11  素材图与 H3 的配合规则	20
+7  短剧场景实战（竖屏短剧钩子）	20
+7.1  15 秒钩子四节拍	21
+7.2  选角与参考图工作流	21
+7.3  三题材钩子模板（即拷即用）	21
+7.4  完整三字段版短剧模板	22
+8  口播商业视频实战	23
+8.1  原生口型同步原理	23
+8.2  七步制作流程	23
+8.3  口播模板	23
+8.4  口播避坑清单	24
+9  电影感短片实战	25
+9.1  五段式方法论	25
+9.2  电影感模板	25
+10  风格体系速查	26
+11  常见失败与修复	27
+12  附录	28
+附录 A  官方案例全文	28
+附录 B  资源索引	30
+附录 C  中英术语对照表	31
+附录 D  Mermaid 结构图源码（可复制到支持 Mermaid 的工具渲染）	31
+1  文档说明与使用指南
+本手册面向两类使用者：一是「剧核」项目的创作者本人，二是接手该工作流的编程 agent。手册将 MiniMax H3 官方提示词规范转化为可直接复制、直接执行的生产资料：用 DeepSeek 把剧本编译成 H3 结构化提示词，用文生图模型生成人物图、场景图、道具图与分镜图四类素材图，最后交给本地部署的 H3 生成带原生对白与立体声的视频。所有模板均可原样复制进工作流。
+1.1  核心结论（先读这一节）
+定位：H3 是视频生成模型，不是文本模型。它的输入是「一段结构化提示词 + 可选图像/视频/音频参考」，输出是 4—15 秒、带同步立体声的视频。
+结构：提示词必须结构化。官方提示词系统由三字段组成：integrated_multimodal_description、overall_soundscape、non_diegetic_music；参考素材模式另有六段格式。字段名不可改名、不可省略。
+本地部署：官方线上服务有 H3-Context-IR 自动把大白话改写为结构化提示词，但该模块未开源。本地部署没有它——你（或 DeepSeek）就是 Context-IR。本手册第 5 章即为替代方案。
+语法要点：对白逐字写、口型自动同步；镜头用运动类型+幅度+速度描述；声音分三层（场景声/整体声景/配乐）各归其位；说话人用固定编号 (S1)、(S2)。
+黄金法则：一句话剧情概括无法生成好视频。每个句子必须描述某个时刻看得见、听得见的具体内容。
+1.2  如何使用本手册
+首次系统学习：按 2→3→4→5→6 顺序通读，建立 H3 语法与素材图体系的概念。
+日常生产：直接使用第 5 章的 DeepSeek 系统提示词与示例、第 6 章的素材图模板、第 7—9 章的场景模板。
+出问题排查：查第 11 章常见失败与修复对照表。
+给编程 agent 的对接说明：第 5.2 节的 DeepSeek 系统提示词、第 5.3 节的输入格式、第 5.4 节的输出格式，即为工作流的输入输出契约，可直接固化为脚本或 Agent 指令。
+2  MiniMax H3 能力基线速览
+2.1  模型定位
+MiniMax H3 是 MiniMax 于 2026 年 8 月 3 日开源的新一代通用视频生成系统（开源公告：minimaxi.com/news/minimax-h3-open-source）。它统一理解文本、图像、视频、音频构成的多模态上下文，并原生生成「视频 + 32 kHz 立体声音频」——对白与口型在同一个生成过程中完成，无需后期配音。这一能力决定了 H3 特别适合短剧钩子、口播商业视频、电影感短片等以对白和表演为核心的创作。
+2.2  输出规格
+2.3  模型版本与输入规格（checkpoint）
+H3 以两个 task-specific checkpoint 开源，分别服务不同任务，不能互换：
+2.4  系统三模块与「自建提示词系统」的必要性
+完整 H3 系统由三个模块组成：H3-Context-IR（把自由形式的多模态输入理解、提炼并序列化为 H3 可直接使用的结构化上下文表示）、H3-Base（据此生成 768p 视频与立体声）、H3-Regenerate-2K（结合原始上下文把 768p 再生成为 2K）。官方明确说明：H3-Context-IR 对最终输出质量非常重要，强烈建议接入其 API，或「参考提示词指南搭建自己的上下文处理系统」。
+本次开源仅包含 H3-Base（FL2VA 与 Ref2VA 两个 checkpoint）；Context-IR 与 Regenerate-2K 未开源，以 API 形式提供。因此本地部署的提示词编写质量，直接决定了成片质量上限。本手册第 3—5 章即自建提示词系统的完整方案。
+2.5  本地部署要点（ComfyUI 路径）
+推荐路径：ComfyUI 0.30.0 及以上版本原生提供 MiniMax H3 的 T2V、I2V、R2V 三个模板，通过 Template Library → Video 即可加载。模型文件放置如下：
+关键参数：分辨率：短边 768 像素，宽高对齐到 32 的倍数；16:9 原生画布为 1344×768。不要选 1.0 Megapixels（会得到 1376×768，超出 H3-Base 面积上限）。
+FL2VA 示例工作流默认 20 steps；可选 8-step Turbo LoRA 提速但可能降低动作与音频质量。
+R2V 使用独立的 4-step Turbo LoRA；比较结果时须记录 LoRA 名称、强度、steps、seed 与全部参考素材。
+服务化部署可选用 SGLang（官方固定基线）或 vLLM-Omni；消费级 GPU 需 layerwise 卸载与量化，参见官方本地部署文档。
+2.6  许可与合规注意
+MiniMax H3 采用 MiniMax H3 Community License。截至 2026 年 8 月审阅版本，美国、欧盟、英国、韩国属于 Excluded Territories，需要另行申请许可。下载、部署、提供托管服务前应阅读最新协议；同时需遵守其 Acceptable Use Policy（合法使用与使用限制）。
+3  H3 提示词核心语法（Base 模式）
+Base 模式覆盖 T2VA、I2VA、FL2VA、L2VA 四种任务，共用一套「三字段」结构；带图像锚点的任务在结构前加一行图像对齐指令。本章给出官方规范全文要点，是第 5 章 DeepSeek 工作流的底层语法。
+3.1  任务模式选择
+3.2  三大核心字段
+字段名不可改名、不可省略。本地部署没有 Context-IR，不写这三个字段等于向 H3 提交缺键的 JSON。
+3.3  图像对齐指令（每种任务的首行）
+I2VA、FL2VA、L2VA 的最终提示词首行必须是指令行，随后空一行，再写三字段。T2VA 无此指令行。四个任务的官方指令行如下：
+指令行模板（N 为实际最后一个镜头的序号，S.SS 为有效视频时长，精确到两位小数）
+I2VA：
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+FL2VA：
+How the reference pictures align with the target video — Picture 1 (from Shot 1) aligns with the 0.00-second mark of the target video; Picture 2 (from Shot N) aligns with the S.SS-second mark of the target video.
+L2VA：
+How the reference pictures align with the target video — <Picture 1> (from [Shot N]) aligns with the S.SS-second mark of the target video.
+3.4  镜头语言词库
+完整的镜头表达 = 运动类型 + 幅度 + 速度，作为自然英文写进句子，不要堆成句尾标签。幅度与速度只有在影响结果时才写；中幅度、常速通常省略。
+镜头写法示例
+The camera pushes in with small amplitude at slow speed toward the folded letter in her hands.
+The camera pans right with large amplitude at fast speed, revealing the open doorway.
+The camera holds a static shot as the runner exits the frame.
+3.5  时间戳与切镜规范
+[Shot 1] 不加时间戳；后续每个镜头以 [Shot N] At MM:SS.mmm 开头，切点严格递增且在请求时长内（S.SS 精确两位小数）。
+切镜必须引入新的主体、空间、状态、视点或时间信息；仅距离或角度的小变化用运镜，不切镜。
+普通切镜用 the camera cuts to / the shot cuts to / the shot transitions to；用户明确要求时才用交叉溶解、淡入淡出、划像。
+节奏预算：约每 3 秒一个切镜；10 秒内 4 个镜头已属激进；每个镜头至少 3 秒才能建立有效信息。双人对话场景 8 秒左右最佳，单拍 5 秒左右。
+3.6  说话人、对白与口型
+凡说话、唱歌或产生画外嗓音的主体，按发声顺序分配稳定编号 (S1)、(S2)……同一人跨镜头保持同一编号；多人与声用复合编号 (S1,S2)；从不发声的角色不给编号。
+说话人身份、语气、动作放在 <d> 标签之外；<d> 内只放语言标签与逐字台词：<d>[English] 原词原句。</d>。台词必须逐字保留，不得翻译、改写。
+画外音（voiceover）：使用精确短语 says in an off-screen voiceover，并紧跟一句「画内人物嘴唇保持闭合」。
+台词跨切镜延续用 <scenetrans> 标注并说明声音连续；视频结束台词被截断用 <cutoff>。
+对白字数预算：自然语速约每秒钟 2.5 个英文词；10 秒片段留 20—25 个词给对白比较稳妥，超出会催赶语速或被截断。
+对白写法示例
+The young woman with a quiet, breathy voice (S1) says: <d>[English] I get off at the next station.</d>
+The two children (S1,S2) shout together, <d>[English] Wait for us!</d>
+The man (S1) says in an off-screen voiceover: <d>[English] I still remember that road.</d> while his lips remain completely closed.
+3.7  可见文字
+画面上实际出现的招牌、标签、字幕、横幅、界面文字等，必须放在英文双引号内原样保留（语言、大小写、标点都不改，不翻译）：
+可见文字示例
+A red neon sign reading "营业中" glows above the doorway.
+3.8  音频三分层
+H3 把声音分为三层，各归其位、不得混放：
+不要用「紧张的音乐」「烘托氛围」这类抽象词；写「慢速稀疏钢琴 + 持续低弦乐渐强后淡出」才有用。
+3.9  篇幅与时长预算
+复杂多镜头场景：integrated_multimodal_description 目标 350—450 个英文词；简单单镜头 150—250 词。
+对白密集片段优先保证完整台词时间线，不机械凑字数。
+先定总时长，再排切点，最后写内容；从内容反推时间戳会出现超出片长的切点。
+3.10  Base 完整模板
+Base 三字段模板（T2VA 直接以此开头；I2VA/FL2VA/L2VA 先加 3.3 节指令行）
+integrated_multimodal_description: [Shot 1] [整体风格与初始构图]。 [主体身份、位置、动作与运镜]。 [说话人 (S1) 与 <d>[语言] 逐字台词</d>（如有）。 [Shot 2] At 00:SS.mmm, the camera cuts to [新信息]。
+overall_soundscape: [全片氛围声、物理动作声、非语言人声]。
+non_diegetic_music: [乐器、速度、节奏、力度变化]，或 N/A。
+4  全参考模式（Ref2VA）六段格式
+Ref2VA 用于有参考图像/视频/音频的创作：角色一致性、动作参考、音色参考、原始音频复用等。它不是「更长的 Base 提示词」，而是固定的六段结构：先定义每个素材贡献什么，再记录它如何被使用。官方要求六段正文全部用英文书写（对白、歌词、画面文字保留原语言）。
+4.1  四种引用标签
+4.2  任务类型（summary 前缀）
+多类型并存时用加号组合且不重复，例如 [video continuation + keyframe completion]、[video editing + audio reuse]。
+4.3  保留关系词汇（retention_analysis）
+4.4  六段结构模板
+Ref2VA 六段模板（正文按官方要求用英文书写；标签语义全篇保持一致）
+subject_definitions:
+<Subject 1> is [从 <Picture N> 提取的可复用可见内容]，preserving [身份定义特征]。
+<Video 1> is [剪辑/续接/结构角色]（如适用）。
+<Audio 1> is [复制或参考角色] for <Subject 1> (S1)（如适用）。
+summary:
+[任务类型 + 任务类型] [目标视频与主要参考关系的概述]。
+retention_analysis:
+<Subject 1> (appears in [Shot 1]): fully_preserved - [保留的特征]。
+<Audio 1>: reference - [未复制信号、仅参考的音频特征]。
+detailed_description:
+[开头用一两句英文写整体视觉风格]。
+[Shot 1] [构图、参考标签生效点、主体动作、运镜、同步声音与对白]。
+[Shot 2] At 00:SS.mmm, [切镜与新信息]。
+overall_soundscape: [氛围声、物理声与音频关系]。
+non_diegetic_music: [配乐与音频关系]，或 N/A。
+4.5  规则要点
+生成类任务 detailed_description 通常 350—500 个英文词；对白密集优先保证完整台词时间线。
+每个标签只定义一次，六段中含义保持稳定；summary 中不得引入新标签；retention_analysis 中不写 (Sx) 说话人编号。
+整体风格写在 [Shot 1] 之前（Base 模式风格写在 [Shot 1] 之后），这是两者的格式差异。
+参考主体说话时写 <Subject N> (Sx)，在标签生效的位置自然插入，如 the shot begins from <Picture 1>。
+画面可见文字用英文双引号原样保留；听不清的源词标 [unclear]，不猜写。
+5  DeepSeek 剧本转提示词工作流（核心）
+本章解决本地部署最关键的问题：H3-Context-IR 未开源，谁来把剧本「编译」成 H3 结构化提示词？方案：用 DeepSeek 扮演提示词编译器。创作者只写剧本与分镜，DeepSeek 按官方语法输出 H3 三字段/六段提示词，并顺带输出四类素材图的文生图提示词。整套输入输出契约可直接固化进编程 agent 的工作流。
+5.1  工作流总览
+第 1 步，输入：剧本 / 分场脚本（含对白、动作、镜头、声音指示）。
+第 2 步，DeepSeek 依据第 5.2 节系统提示词编译：判定任务模式 → 输出 H3 结构化提示词 → 按需输出素材图提示词与角色登记表。
+第 3 步，用文生图模型按素材图提示词生成人物图、场景图、道具图、分镜图（详见第 6 章）。
+第 4 步，在 ComfyUI 的 H3 T2V / I2V / R2V 模板中填入提示词与素材图，本地生成 768p 视频。
+第 5 步，需要 2K 时，将 768p 结果与原始上下文交给官方 H3-Regenerate-2K API。
+5.2  DeepSeek 系统提示词（完整可复制）
+把以下文本整体作为 DeepSeek 的 System Prompt（或存入工作流常量）。它把 DeepSeek 配置为「H3 提示词编译器」，输出可直接投喂 H3 的提示词。
+DeepSeek 系统提示词（H3 提示词编译器配置，可直接复制）
+【角色】你是 MiniMax H3 视频生成提示词编译器（H3 Prompt Compiler）。MiniMax H3 是原生联合生成「视频 + 32 kHz 立体声」的多模态视频模型：对白与口型一次生成、无需后期配音。你的任务：把用户输入的剧本/分场脚本/分镜需求，编译成 H3 可直接执行的结构化提示词；当用户需要素材图时，同时输出文生图提示词。
+【输出语言与篇幅】
+1. 提示词正文一律用英文书写（H3 文本编码器 Qwen3-VL-32B 对英文结构化文本响应最佳）；对白、歌词、画面可见文字保留用户原始语言。
+2. 生成类任务主字段（integrated_multimodal_description 或 detailed_description）目标 350—450 个英文词；对白密集片段优先保证完整台词时间线，不机械凑字数。
+3. 禁止抽象词（cinematic、beautiful、紧张、感人、史诗感等无画面含义的词）；只写某个时刻看得见、听得见的具体内容。
+4. 先定总时长（4—15 秒）再排切点：约每 3 秒一个切镜，每镜至少 3 秒。
+【任务模式判定】
+- 纯文本、无参考图 → T2VA：直接输出三字段，无指令行。
+- 有 1 张首帧图 → I2VA：首行指令 For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced. 空一行后接三字段；从首帧向前发展。
+- 有首帧 + 尾帧 → FL2VA：首行指令说明 Picture 1 对齐 0.00 秒、Picture 2 对齐 S.SS 秒；主体描述两帧之间连续可见的变化路径（姿态、物体状态、构图、光线、运镜逐步收敛到尾帧），倾向单镜头。
+- 只有尾帧 → L2VA：首行指令 <Picture 1> (from [Shot N]) 对齐 S.SS 秒；推断合理前置状态后逐步收敛到尾帧。
+- 有参考图/视频/音频（角色、动作、音色、场景参考等）→ Ref2VA：输出六段格式（subject_definitions / summary / retention_analysis / detailed_description / overall_soundscape / non_diegetic_music）。
+【三字段语法（T2VA/I2VA/FL2VA/L2VA）】
+- integrated_multimodal_description：以 [Shot 1] 开头写整体风格与初始构图（风格可用 Cinematic、live-action、2D-animated、3D CG、claymation、watercolor、vintage film 等），再写主体身份、位置、动作、运镜、同步声音；后续镜头用 [Shot N] At 00:SS.mmm, the camera cuts to ...（[Shot 1] 无时间戳；切点严格递增且在时长内；切镜必须引入新主体/空间/状态/视点/时间，仅角度距离变化用运镜不切镜）。
+- overall_soundscape：1—4 句英文，总结全片氛围声、物理动作声、非语言人声（风、雨、交通、脚步、织物、撞击、呼吸、笑声）；不重复对白与配乐；要求全程静音才写 N/A。
+- non_diegetic_music：1—3 句英文，只写乐器、速度、节奏、力度变化（如 slow sparse piano joined by sustained low strings, gradually increasing in volume）；抽象情绪词无效；无配乐写 N/A。
+- 镜头表达 = 运动类型 + 幅度 + 速度，自然写进句子：Zoom/Push/Pull/Truck/Pedestal/Pan/Tilt/Arc/Tracking/Static/Shake Slightly/Strongly/POV/Roll Clockwise/Counterclockwise，加 with small/large amplitude、at slow/fast speed。
+【对白与口型】
+- 说话人按发声顺序编号 (S1)、(S2)……，跨镜头稳定；多人同声用 (S1,S2)；不出声不给编号。
+- 说话人身份、语气、动作写在 <d> 标签外；<d> 内只放语言标签 + 逐字台词：<d>[English] 原词原句。</d>；台词逐字保留、不翻译不改写。
+- 画外音用精确短语 says in an off-screen voiceover，并紧跟「对应画内人物嘴唇保持闭合」。
+- 台词跨切镜延续用 <scenetrans> 并说明声音连续；视频结束台词被截断用 <cutoff>。
+- 对白预算：约每秒 2.5 个英文词；10 秒片段留 20—25 个词给对白，留出句首句尾呼吸。
+【可见文字】画面上实际出现的招牌/标签/字幕/界面文字，放英文双引号内原样保留，不翻译。
+【Ref2VA 六段规则】
+- subject_definitions：定义每个引用标签。Subject = 可复用可见内容单元；Picture = 帧锚点；Video = 整段视频来源（剪辑/续接/结构）；Audio = 被复制或参考的音频。一个 Subject 可由多素材共同定义。
+- summary：以 [任务类型] 开头（keyframe completion / reference generation / video editing / video continuation / audio reuse / audio reference，可加号组合不重复），一句话概述目标视频与参考关系。
+- retention_analysis：逐标签记录保留关系。视觉用 fully_preserved / partially_preserved / attribute_transfer / weak_reference；音频用 fully_copy / partially_copy / reference / weak_reference。不写 (Sx)。
+- detailed_description：整体风格写在 [Shot 1] 之前；按播放顺序逐镜写，在标签生效处插入 <Subject N>、<Picture N>、<Video N>、<Audio N>；350—500 个英文词。
+- 标签六段全篇语义一致，不引入新标签；参考主体说话写 <Subject N> (Sx)。
+【素材图提示词（用户要求时输出）】
+按四类输出文生图提示词：人物图、场景图、道具图、分镜图。
+结构顺序（MASTER RULE）：Subject（主体）→ Action（动作）→ Environment（环境）→ Style（风格）→ Camera（景别/视角）→ Lighting（光线）→ Mood（氛围）→ Details（材质/画质词）；每条给出负面提示词（negative prompt：blurry, low quality, distorted, deformed, watermark, text, extra fingers, bad anatomy, oversaturated 等）。
+- 人物图：锁定角色身份与服装，用于 Ref2VA 人脸锚定；写清性别、年龄、发型、五官、体态、服装、姿态、背景环境、景别（建议 medium shot 或 close-up，脸部清晰）。
+- 场景图：锁定环境与氛围，用于首帧或背景参考；写清室内/室外、时代、布局、关键道具、光线与色调。
+- 道具图：锁定关键道具外观，用于特写镜头参考；写清材质、形状、颜色、文字（如有）、光环境。
+- 分镜图：故事板风格，逐格给景别/构图/动作/运镜方向，用于 FL2VA/Ref2VA 构图锚点。
+【输出格式】严格输出 JSON：
+{
+"task_type": "T2VA | I2VA | FL2VA | L2VA | Ref2VA",
+"video_prompt": "最终 H3 提示词全文（英文正文，对白/可见文字保留原语言）",
+"material_image_prompts": [{"type": "人物图/场景图/道具图/分镜图", "prompt": "...", "negative_prompt": "..."}],
+"character_sheet": [{"speaker_id": "S1", "name": "角色名", "appearance": "外貌", "costume": "服装", "voice": "声线"}],
+"notes": "一致性说明、需要准备的参考素材清单、使用注意事项"
+}
+【输出前自检清单】逐项检查，全部通过才输出：
+1. 总时长与所有切点匹配，[Shot 1] 无时间戳，切点递增且在时长内；
+2. 每个句子都是可观察的画面或声音，没有剧情概括与抽象情绪词；
+3. 说话人编号稳定，(Sx) 只在 detailed_description 出现；
+4. 声音三层不混放：场景声在时间线、氛围声在 overall_soundscape、配乐在 non_diegetic_music；
+5. Ref2VA 时六段齐全、标签语义一致、retention 标记正确；
+6. 对白逐字、口型与发声者绑定正确、画外音嘴唇闭合说明齐全。
+5.3  剧本输入格式规范
+给 DeepSeek 的剧本建议使用如下固定格式，确保编译结果稳定：
+剧本输入格式示例
+【场景】内景·顶楼公寓·夜
+【画幅】9:16 ｜ 【时长】10 秒
+【人物】林夏（女，28 岁，强势）；顾言（男，30 岁，深藏不露）
+【分镜】
+1. 中景：林夏在落地窗前签文件，手微颤（0—3 秒）
+2. 过肩：顾言站在窗边注视，神情难测（3—6 秒）
+3. 特写：林夏抬头，说出台词（6—8 秒）
+4. 特写：顾言缓缓半笑，说出台词（8—10 秒）
+【对白】（逐字）
+林夏：现在，你想要的都有了。
+顾言：还没有。暂时而已。
+【声音】
+环境：窗外城市底噪；配乐：安静克制的弦乐，对白下铺垫
+【分镜】行建议写清：景别（远景/全景/中景/近景/特写）、主体动作、起止时间；DeepSeek 会换算为 [Shot N] 与 MM:SS.mmm。
+【对白】必须逐字（这是要生成的口型与声音）；标点按台词需要保留。
+【人物】写清可观察特征（性别、年龄段、气质、服装），供角色登记表与人物图提示词使用。
+角色一致性：多镜头、多场景项目必须为每个角色分配稳定参考图，并在 DeepSeek 输出中登记（见 5.5）。
+5.4  输出格式约定
+DeepSeek 按 5.2 节输出 JSON 后，工作流直接取 video_prompt 字段投喂 H3；material_image_prompts 交文生图模型；character_sheet 归档为项目角色库。字段含义与使用位置如下：
+5.5  角色一致性登记表
+短剧、系列口播必须登记角色，并在每次生成时复用同一张人物参考图：
+规则：同一角色跨镜头、跨场景始终复用同一参考图；人物图提示词与角色登记表描述必须一致（详见第 6 章）。
+5.6  标准操作步骤
+第 1 步：按 5.3 节格式写剧本（单场景 10—15 秒内，一个场景对应一次生成）。
+第 2 步：将 5.2 节系统提示词 + 剧本发给 DeepSeek，要求输出 JSON。
+第 3 步：核对 notes 与 character_sheet；准备/生成素材图（第 6 章）。
+第 4 步：在 ComfyUI H3 模板中按 task_type 选择 T2V/I2V/R2V，填入 video_prompt 与素材图，设置时长与画幅（如 9:16 → 分辨率对齐 32 倍数）。
+第 5 步：生成后按第 11 章排查；单次只改一个变量（换种子/换一个字段/换参考图）。
+5.7  完整示例：剧本片段 → H3 提示词
+以下为 5.3 节剧本经 DeepSeek 编译后的预期输出（video_prompt 字段，正文为英文、对白保留中文）：
+示例输出（短剧场景，10 秒 / 9:16）
+task_type: I2VA（首帧 = 人物图-林夏.png）
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, a medium shot frames the woman shown in <Picture 1>, a sharp-featured woman with long black hair in a dark grey suit, standing at a floor-to-ceiling window of a luxury penthouse at night. The camera holds a static shot as she signs a document on the glass desk, her hand trembling slightly. [Shot 2] At 00:03.000, the shot cuts to an over-the-shoulder shot from behind her, revealing the man with short hair in a black turtleneck standing by the window, his expression unreadable, city lights bokeh behind him. [Shot 3] At 00:06.000, the shot cuts to a close-up of her face as she lifts her gaze from the document, and with a cool, slow voice (S1) says: <d>[Chinese] 现在，你想要的都有了。</d> [Shot 4] At 00:08.000, the shot cuts to a close-up of his face as a half-smile slowly forms, and he says in a low, restrained voice (S2): <d>[Chinese] 还没有。暂时而已。</d> The shot holds on his eyes as the video ends.
+overall_soundscape: Distant city traffic hum continues throughout, with the faint rustle of paper on the glass desk and soft footsteps as the man shifts his weight.
+non_diegetic_music: Restrained low strings at a slow tempo, sustained quietly under the dialogue with no swell.
+6  素材图提示词体系
+素材图在 H3 工作流中承担两类任务：一是作为 I2VA/FL2VA/L2VA 的帧锚点（首帧、尾帧），二是作为 Ref2VA 的参考素材（锁定身份、场景、道具、构图）。本章给出四类素材图的编写规范与即用模板。
+6.1  素材图四类角色
+6.2  素材图通用质量要求
+清晰度优先：人脸/主体分辨率要足够，避免模糊；H3 会以参考图作为身份与构图的锚点。
+单一主体：人物图画面中只放目标角色，背景简洁；多人画面会稀释身份锁定。
+无遮挡、无水印：脸部不被手/物体遮挡，画面无文字水印（否则会带入生成结果）。
+画幅一致：9:16 项目生成 9:16 素材图；16:9 项目生成 16:9 素材图；避免后期裁切改变构图。
+光线一致：系列素材图使用同一光线方向与色温，减少跨镜头观感漂移。
+6.3  文生图提示词通用结构
+文生图提示词按固定顺序组织，AI 认为越靠前的信息越重要：
+文生图 MASTER RULE 顺序
+Subject（主体）→ Action（动作）→ Environment（环境）→ Style（风格）→ Camera（景别/视角）→ Lighting（光线）→ Mood（氛围）→ Details（材质/细节/画质词）→ Negative（负面提示词）
+主体：谁/什么（性别、年龄、发型、五官、服装、姿态）。
+动作：正在做什么（站、坐、走、签文件、注视……）。
+环境：在哪里、什么时代、关键布局（顶楼公寓、竹林、古堡走廊……）。
+风格：写实/动画/胶片/水墨……（词库见 6.9）。
+镜头：景别（close-up/medium shot/wide shot）+ 视角（eye-level/low angle/high angle/over-the-shoulder）+ 镜头感（35mm/50mm/85mm、anamorphic）。
+光线：光源类型与方向（词库见 6.8）。
+氛围：情绪基调（冷峻、温暖、压抑……，用可观察词表达）。
+细节/画质：skin texture、sharp focus、high detail、8k、photorealistic。
+负面提示词：明确排除的瑕疵（见 6.10）。
+6.4  人物图提示词
+人物图用于锁定角色，是短剧一致性的根基。模板：
+人物图模板
+{性别、年龄、发型、五官特征}，wearing {服装细节}，{动作/姿态}，{背景环境，简洁}，{风格}，{景别，脸部清晰}，{光线}，{氛围}，{细节与画质词}，negative: {负面提示词}
+人物图示例（林夏）
+Chinese woman, late 20s, long straight black hair, sharp almond eyes, cool pale skin, high cheekbones, wearing a dark grey tailored suit skirt, standing upright with arms crossed, blurred luxury penthouse interior background, cinematic portrait, medium shot, eye-level, soft key light with cool window rim light, calm confident cold aura, ultra detailed skin texture, sharp focus, photorealistic, 8k
+配套负面提示词：blurry, low quality, distorted face, asymmetrical face, extra fingers, deformed hands, watermark, text, signature, cropped, oversaturated, cartoonish
+6.5  场景图提示词
+场景图锁定环境与氛围，用于首帧或场景参考。模板：
+场景图模板
+{室内/室外}，{时代与空间类型}，{关键布局与道具}，{天气/时段}，{风格}，{景别}，{光线与色调}，{氛围}，{细节与画质词}，negative: {负面提示词}
+场景图示例（顶楼公寓夜景）
+interior, luxury modern penthouse living room at night, floor-to-ceiling windows with city skyline bokeh, dark wood and marble finishes, warm ambient floor lamps, a glass desk near the window, cinematic wide shot, moody low-key lighting with cool blue city glow and warm interior contrast, high contrast, photorealistic, 8k
+配套负面提示词：blurry, low quality, people, watermark, text, logo, cluttered, oversaturated, fisheye distortion
+6.6  道具图提示词
+道具图用于特写镜头与关键物体的外观锁定。模板：
+道具图模板
+{道具名称与数量}，{材质}，{形状/颜色/表面文字}，{摆放状态}，{环境光}，{景别，主体突出}，{细节与画质词}，negative: {负面提示词}
+道具图示例（合同文件）
+a signed legal contract document on a dark glass desk, white paper with dense black printed text, a black fountain pen resting beside it, warm desk lamp light from the left, shallow depth of field, cinematic close-up, sharp focus on the paper fibers, photorealistic, 8k
+配套负面提示词：blurry, low quality, watermark, deformed text, extra objects, hands, reflection artifacts, oversaturated
+6.7  分镜图提示词
+分镜图用故事板风格表达景别、构图、动作与运镜方向，作为 FL2VA/Ref2VA 的构图锚点。模板：
+分镜图模板
+storyboard sketch, {格数} panels: {panel 1：景别+主体动作}；{panel 2：景别+主体动作}，clean {线条风格} with {明暗}，clear composition, arrows indicating camera direction, {风格说明}，{画质词}
+分镜图示例（两格故事板）
+film storyboard sketch, two panels: panel 1 medium shot of a woman signing a document with trembling hands at a window desk; panel 2 over-the-shoulder shot of a man watching her by the window, clean ink linework with grey wash shading, clear composition, camera direction arrows, professional storyboard style, high detail
+配套负面提示词：blurry, low quality, color photograph, realistic render, watermark, text captions, deformed figures
+6.8  光线词库
+6.9  风格词库
+6.10  负面提示词库
+负面提示词用于文生图模型（FLUX / SD / 即梦等），H3 视频提示词本身不支持 negative prompt 字段（需要用句子显式排除，如「camera remains completely static throughout」）。
+人物类：通用人物：blurry, low quality, low resolution, distorted, deformed, disfigured, bad anatomy, bad hands, extra fingers, extra limbs, fused fingers, missing fingers, bad proportions, plastic skin, watermark, text, signature, logo, cropped, out of frame, worst quality, jpeg artifacts, duplicate, oversaturated, cartoonish
+场景道具类：场景/道具：blurry, low quality, watermark, text, logo, cluttered, oversaturated, fisheye distortion, people, extra objects
+视频类：视频成片防瑕疵（用于提示词句子或后续检查）：flickering, jittery frames, morphing face, unstable body, warping background, lip sync broken, static noise
+6.11  素材图与 H3 的配合规则
+首帧图质量决定 I2VA 起点：构图、光线、服装都从首帧继承，首帧是什么样，前几秒就是什么样。
+人物图在 Ref2VA 中锚定身份：把 <Subject 1> is the woman in <Picture 1>, with ... 写进 subject_definitions，并声明保留特征（fully_preserved）。
+分镜图作为构图锚点：在 detailed_description 中写明 the shot begins from <Picture N> / the shot ends on <Picture N>。
+素材图内容与 video_prompt 描述必须一致：例如人物图穿深灰西装裙，video_prompt 里就不能写红色长裙。
+对白不进素材图：素材图是静帧，不需要也不应包含台词文字（除非画面道具本身有文字）。
+7  短剧场景实战（竖屏短剧钩子）
+竖屏短剧的全部商业经济学吊在「钩子」上：前 15 秒决定观众留不留。H3 的优势在于一次生成就是一个多切镜场景——切镜、一致角色、带口型台词一次完成，不需要剪辑拼接。
+7.1  15 秒钩子四节拍
+每个成功的竖屏短剧钩子都在压缩同样四个节拍。写提示词不是让模型即兴编剧，而是递给它一张镜头清单：
+7.2  选角与参考图工作流
+用两张照片选角：每位主角一张清晰的脸部参考（单张 ≤30 MB），按顺序上传，在提示词里就是图片 1、图片 2。
+把四个节拍写成切镜：每次切镜点名景别和主体（切特写：她的手），让 H3 的剪辑节奏不脱稿。
+写出每一句台词：逐字、加引号、注明谁说；15 秒里两三句足够。
+按 9:16 生成：打磨节拍用 768p 出草稿，最终交付版用 2K。
+像测广告素材一样测钩子：同一主角、不同揭示，每个变体就是一次生成，让点击率数据替你挑故事。
+7.3  三题材钩子模板（即拷即用）
+以下三条来自社区实战验证（Pixo），写法可直接套用。提示词要点：图片 1 锁女主、图片 2 锁男主，四个切镜对应四个节拍，悬崖落在说出口的台词上。
+模板一：那份合同（现代豪门恋）
+豪门恋钩子（现代）
+图片1 锁定女主的脸。图片2 锁定男主的脸。
+9:16 竖屏短剧场景，夜晚的豪华现代顶层公寓，电影感主光。
+切镜1，中景：她在玻璃桌前签署一份文件，双手微微颤抖。
+切镜2，过肩：他站在落地窗前注视，神情难以捉摸。
+切镜3，她的特写：她抬起头说：“现在，你想要的都有了。”
+切镜4，他的特写：一个缓慢的半笑。他说：“还没有。暂时而已。”
+定格在他的眼神上。对白下铺安静的紧张弦乐，窗外城市底噪。
+模板二：那次揭示（吸血鬼哥特风）
+哥特钩子（悬疑浪漫）
+图片1 锁定女主的脸。图片2 锁定男主的脸。
+9:16 竖屏哥特浪漫风，烛光照亮的庄园走廊，浓重阴影，月光透过高窗。
+切镜1，远景：她沿走廊缓缓后退，烛台光影摇曳。
+切镜2，特写：他的脸一半沉在阴影里。他轻声说：“你不该跟来的。”
+切镜3，插入镜头：他的手撑在她头侧的墙上。
+切镜4，她眼睛的大特写，映着烛光。她低声说：“我知道你是什么。”
+最后一个字上硬切黑场。全程只有风声和烛火摇曳声；没有音乐。
+模板三：那次翻盘（古装武侠权谋）
+武侠钩子（权谋）
+图片1 锁定女主的脸。图片2 锁定男主的脸。
+9:16 竖屏场景，夜晚薄雾竹林，冷月光，电影级武侠质感。
+切镜1，远景：两个披斗篷的身影在窄道相遇，灯笼摇晃。
+切镜2，中景：她递给他一封小小的火漆密信。她说：“阅后即焚。”
+切镜3，特写：他却当场拆开封蜡，目光抬起迎上她的眼睛。
+切镜4，反应特写：她的镇定裂开一瞬。
+在任何人再开口之前、一次呼吸的中途收尾。夜虫声，风穿竹林，衣料窸窣。
+7.4  完整三字段版短剧模板
+把 7.3 的中文切镜语翻译并结构化为官方三字段格式，得到可直接投喂 H3 的正式提示词（对白保留中文）：
+竖屏短剧三字段正式模板（I2VA / 9:16 / 10—12 秒）
+For the target video, at 0.00 seconds into the target video, <Picture 1> (from [Shot 1]) is fully referenced.
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, vertical 9:16 composition, a medium shot frames the woman in <Picture 1> signing a document on a glass desk in a luxury penthouse at night, her hands trembling slightly. [Shot 2] At 00:03.000, the shot cuts to an over-the-shoulder shot of the man from <Picture 2> standing by the floor-to-ceiling window, watching her with an unreadable expression. [Shot 3] At 00:06.000, the shot cuts to a close-up of her face as she lifts her gaze and, with a cool controlled voice (S1), says: <d>[Chinese] 现在，你想要的都有了。</d> [Shot 4] At 00:09.000, the shot cuts to a close-up of his face as a slow half-smile forms, and he says in a low measured voice (S2): <d>[Chinese] 还没有。暂时而已。</d> The final frame holds on his eyes and cuts to black.
+overall_soundscape: Distant city traffic hum continues under the scene, with faint paper rustle and the soft shift of fabric.
+non_diegetic_music: Restrained tense strings at a slow tempo, sustained quietly under the dialogue, no swell.
+8  口播商业视频实战
+8.1  原生口型同步原理
+H3 的画面与声音来自同一次生成：口型因为声音存在而同步，而不是后期用第二个模型硬套。因此提示词的核心法则是——你负责指定声音，而不是去修口型。不指定音频，H3 会自行编造一段音轨（通常是第一个失败原因）。
+8.2  七步制作流程
+第 1 步，选模式：纯文字描述人物与场景用 T2VA；有真人照片用 I2VA 或 Ref2VA；跨片段保持一致角色就固定复用同一张参考图——身份住在参考文件里，不在你的文字描述里。
+第 2 步，先写场景后写台词：先给一拍视觉上下文（谁、在哪、在做什么），一开口就让模型建立镜头的提示词往往翻车。
+第 3 步，逐字写台词：台词放引号里并写明谁说的；语气描述放引号外。不要改写自己的台词。
+第 4 步，写清整个声景：指定声音、指定还要听到什么、指定不要什么（如 quiet room tone, no music）。
+第 5 步，说话时稳住镜头：台词期间用固定或轻微运镜；大动作运镜会让模型同时解决两个难题。
+第 6 步，时长与画幅放在界面设置里，不写进提示词。
+第 7 步，生成后一次只改一个变量：改三个地方，你就不知道是哪个起了作用。
+8.3  口播模板
+模板一：基础口播（T2VA）
+基础口播模板（英文）
+A man in a grey sweater sits in a home office looking at the camera. He says clearly: “This clip took fifteen seconds to make.” Static medium close-up, warm lamp light from the side. Audio: clear male voice, quiet room tone, no music.
+模板二：新闻主播（T2VA，含镜头推进与双段台词）
+新闻主播口播（三字段 / 10 秒）
+integrated_multimodal_description: [Shot 1] Live-action, broadcast studio look, a medium shot frames a news presenter (S1) behind a dark desk in a sleek modern studio, screens glowing blue behind them. The camera pushes in with small amplitude at slow speed as the presenter looks to camera and, with a clear measured voice, says: <d>[Chinese] 晚上好，我们首先关注一条正在发生的新闻。</d> They glance down at the desk, then back up. [Shot 2] At 00:06.500, the camera cuts to a tighter close-up as the presenter continues: <d>[Chinese] 本台记者已抵达现场。</d>
+overall_soundscape: A quiet studio room tone with a faint air-handling hum. Paper shifts once on the desk and fabric rustles as the presenter turns.
+non_diegetic_music: A short brass-and-synth sting at a moderate tempo under the opening, settling into a low sustained pad.
+模板三：UGC 自拍测评（T2VA，真实感）
+UGC 自拍测评口播（三字段 / 10 秒）
+integrated_multimodal_description: [Shot 1] Live-action, handheld selfie-style, a close-up frames a young woman (S1) holding the camera at arm’s length in a bright room, daylight from a window on her face. The camera shakes slightly at normal speed as she turns a small product toward the lens and, with a warm conversational voice, says: <d>[Chinese] 这个我用了一个星期了。</d> She tilts it to show the label. [Shot 2] At 00:06.000, the camera holds as she looks back to the lens and adds: <d>[Chinese] 说实话，没想到效果这么快。</d>
+overall_soundscape: A quiet indoor room tone with faint street sound beyond the window. Fabric brushes the microphone as the arm shifts, and the product cap clicks once.
+non_diegetic_music: N/A
+8.4  口播避坑清单
+9  电影感短片实战
+9.1  五段式方法论
+电影感 AI 短片提示词的实战方法论（社区拆解自成熟作品）：把一段短叙事拆成五段，每段只负责一个生产决策：
+核心原则：把「一句话」写成「电影感提示词」，就是把抽象情绪翻译成可观察的画面与声音——情绪由光线、动作、景别和声音承载，而不是由形容词承载。
+9.2  电影感模板
+电影感空镜模板（赛博城市漫游 / 16:9）
+integrated_multimodal_description: [Shot 1] Live-action, cinematic, a wide aerial shot frames a nighttime futuristic city dense with neon billboards in blue and magenta, flying vehicles threading between mirrored skyscrapers. The camera performs a tracking shot forward with large amplitude at slow speed, gliding between towers as reflections streak across wet glass. [Shot 2] At 00:05.000, the camera tilts down with medium amplitude to reveal rain-slick streets far below, neon signage doubled in the standing water as traffic flows through the canyon.
+overall_soundscape: A deep city hum carries the rising and falling whine of vehicles passing overhead. Rain hisses against glass and metal, and distant traffic echoes between the towers.
+non_diegetic_music: A pulsing synthesizer arpeggio at a steady mid tempo over sustained low bass, with a filtered swell that builds and then drops away.
+类型片运镜 SOP：恐怖用缓慢推镜+手持抖动；动作用快推+环绕+慢动作爆发；爱情用缓推+环绕+过肩；悬疑用荷兰角+窥视 POV；史诗用升降+大广角+拉镜。
+预告片骨架：递进式多分镜，锁一档调色，声音设计扛节奏，克制收在切黑 + 片名。
+10  风格体系速查
+按题材快速查「镜头 + 光线 + 色调 + 音效 + 关键词」组合，可直接嵌入第 5 章工作流的剧本或第 6 章素材图提示词：
+11  常见失败与修复
+按现象查找原因与精确改写模式。结构完整的提示词仍然失败时，多半是时间、标签、对白或声音角色互相矛盾。
+12  附录
+附录 A  官方案例全文
+案例一：T2VA 太空歌剧（官方完整 2K 案例，10 秒 / 16:9）
+官方 T2VA 案例（人物推进 + 硬切 + 声音三层示范）
+integrated_multimodal_description: [Shot 1] Cinematic, medium wide shot, pushing in slowly. In the cavernous, dimly lit bridge of a starship, sleek metallic consoles with glowing amber displays flank a massive, curved observation window. A female captain, in her late 40s with an athletic build and short silver-streaked black hair, stands in the center midground. She wears a structured, high-collared dark navy military tunic with silver chest insignias. Her back is to the camera, silhouetted against the cool, ambient starlight pouring through the thick glass. She stands perfectly still with her hands clasped tightly behind her back. Outside the window, a massive armada of jagged, dark grey dreadnoughts hovers in tight formation against a deep purple space nebula. The fleet’s massive rear thrusters begin to glow with an intense, escalating bright blue light. [Shot 2] At 00:04.500, the camera cuts to a close-up of the captain’s face and shakes strongly. The brilliant blue-white light from the fleet’s gathering energy reflects vividly in her dark eyes. Suddenly, a blinding white flash floods through the window, completely washing out the background as the fleet jumps to hyperspace. The sheer spatial force violently jolts the bridge, causing the captain from Shot 1 to stagger slightly forward, her shoulders tensing as she visibly braces herself against the physical tremors. As the intense white light fades abruptly, leaving only the dim, empty expanse of the purple nebula reflected on her starkly lit skin, her jaw clenches, and she slowly closes her eyes in the newly emptied space.
+overall_soundscape: A low, resonant hum of the ship’s ambient life support systems serves as the baseline, soon drowned out by an audible, escalating, high-pitched electronic whine as the fleet outside charges its hyperdrives. A massive, deafening, bass-heavy boom and sharp crackle erupts during the blinding flash, accompanied by the loud metallic creaking, rattling, and deep thuds of the bridge’s bulkheads vibrating under immense physical stress. The intense roaring impact then cuts abruptly back to a hollow, echoing room tone, leaving only the faint, steady hum of the isolated bridge.
+non_diegetic_music: Cinematic space-opera orchestral score, slow tempo, featuring a solitary, mournful French horn melody over deep, sustained string dissonances that build rapidly in volume and intensity, swelling to a massive orchestral peak before snapping immediately into silence right after the jump.
+案例二：Ref2VA 情景喜剧（官方六段完整示例，参考图锁定三主角 + 音色参考）
+官方 Ref2VA 案例（六段结构完整示范）
+subject_definitions:
+<Subject 1> is the coffee-shop environment in <Picture 1>, featuring an exposed brick wall, an orange tufted sofa with patterned pillows, a neon sign, and a wooden coffee table.
+<Subject 2> is the fluffy white Samoyed in <Picture 2>, <Picture 3>, and <Picture 4>, with thick white fur, pointed ears, a dark nose, and a curved tail.
+<Subject 3> is the young blonde woman in <Video 1>, with long blonde hair and a light-pink button-down shirt with rolled-up sleeves.
+<Subject 4> is the young man in <Video 2>, with short wavy brown hair and a dark-grey hoodie with drawstrings.
+<Audio 1> is the voice-timbre reference for <Subject 3> (S1), containing a spoken English vocal layer.
+summary:
+[reference generation + audio reference] The target video shows <Subject 3> eating a cookie in <Subject 1>. <Subject 4> enters with <Subject 2>, which lunges toward the cookie. The three-shot exchange uses <Audio 1> as the voice-timbre reference for <Subject 3> and ends with a canned audience laugh.
+retention_analysis:
+<Subject 1> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - the exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table are retained.
+<Subject 2> (appears in [Shot 1], [Shot 2]): fully_preserved - the Samoyed’s thick white fur, pointed ears, dark nose, and curved tail are retained.
+<Subject 3> (appears in [Shot 1], [Shot 2], [Shot 3]): fully_preserved - the blonde woman’s identity, long hair, and light-pink shirt are retained.
+<Subject 4> (appears in [Shot 1], [Shot 2]): fully_preserved - the young man’s short wavy brown hair and dark-grey hoodie are retained.
+<Audio 1>: reference - its vocal timbre guides the dialogue delivery of <Subject 3> without copying the original signal.
+detailed_description:
+The target video uses a realistic multi-camera sitcom style with warm indoor lighting.
+[Shot 1] A medium shot establishes <Subject 1>, the coffee shop with its exposed brick wall, orange tufted sofa, patterned pillows, neon sign, and wooden coffee table. <Subject 3> (S1), the young woman with long blonde hair and a light-pink button-down shirt with rolled-up sleeves, sits on the sofa holding a chocolate-chip cookie. From the left, <Subject 4>, the young man with short wavy brown hair and a dark-grey hoodie with drawstrings, enters holding the leash of <Subject 2>, the thick-furred white Samoyed with pointed ears, a dark nose, and a curved tail. The dog lunges toward the cookie and pulls the leash taut. <Subject 3> (S1) jerks her hand back and, using the clear youthful voice timbre referenced from <Audio 1>, exclaims with light annoyance, <d>[English] Hey! Watch your dog!</d> She closes her lips and guards the cookie while <Subject 4> pulls the dog back.
+[Shot 2] At 00:03.000, the shot cuts to a close-up of <Subject 4> (S2), the young man in the dark-grey hoodie from Shot 1, sitting beside <Subject 3> on the sofa and holding <Subject 2> securely in his arms. <Subject 4> (S2) says in a casual young male voice with a playful tone and an easy conversational pace, <d>[English] He just likes cookies more than me.</d> He closes his mouth into an apologetic smile and strokes the dog’s thick white fur.
+[Shot 3] At 00:05.000, the shot cuts to a close-up of <Subject 3> (S1), the blonde woman in the light-pink shirt from Shot 1. Her annoyance softens as she looks toward the Samoyed. <Subject 3> (S1) replies in the same clear youthful voice referenced from <Audio 1> with an amused cadence, <d>[English] Well, he has good taste at least.</d> She smiles and raises the cookie in a small toast-like gesture. A classic canned audience laugh begins immediately after the line and continues through the final frame.
+overall_soundscape:
+Soft indoor coffee-shop room tone continues throughout the scene.
+non_diegetic_music:
+N/A
+附录 B  资源索引
+附录 C  中英术语对照表
+附录 D  Mermaid 结构图源码（可复制到支持 Mermaid 的工具渲染）
+以下 Mermaid 源码与正文结构一一对应，便于在项目文档、飞书、Notion 等支持 Mermaid 的环境复用。
+Mermaid：DeepSeek 工作流总览
+flowchart LR
+A[剧本/分场脚本] --> B[DeepSeek
+H3 提示词编译器]
+B --> C[结构化 H3 提示词
+三字段 / 六段]
+B --> D[素材图提示词
+人物/场景/道具/分镜]
+C --> E[ComfyUI
+H3 T2V / I2V / R2V]
+D --> F[文生图模型]
+F --> E
+E --> G[768p 视频+立体声]
+G --> H[Regenerate-2K API]
+H --> I[2K 成片]
+Mermaid：H3 提示词结构思维导图
+mindmap
+root((H3 提示词))
+Base 三字段
+integrated_multimodal_description
+风格与构图
+主体与动作
+运镜
+对白与口型
+场景同步声
+overall_soundscape
+氛围声
+物理动作声
+非语言人声
+non_diegetic_music
+乐器
+速度
+节奏
+力度
+Ref2VA 六段
+subject_definitions
+summary
+retention_analysis
+detailed_description
+overall_soundscape
+non_diegetic_music
+Mermaid：短剧钩子四节拍
+timeline
+title 15 秒短剧钩子四节拍
+0-3 秒 冷开场 : 空降冲突正中
+3-8 秒 揭示 : 秘密/耳光/合同/戒指易手
+8-13 秒 反转 : 权力翻盘
+13-15 秒 掐断 : 台词悬空硬切黑场
+[表格1]
+规格项 | 参数 | 说明
+输出时长 | 4—15 秒 | 时长按 17n+5 帧网格、24 FPS 对齐，请求时长可能被调整为有效帧数
+输出比例 | 21:9、16:9、4:3、1:1、3:4、9:16 | 竖屏短剧用 9:16，电影感用 16:9 或 21:9
+输出分辨率 | 短边 768 像素（默认）；2K 需 H3-Regenerate-2K | 本地 H3-Base 只出 768p
+帧率 | 24 FPS（固定） | —
+输出音频 | 32 kHz 立体声，与画面联合生成 | 对白、口型、环境声、配乐一次生成
+对白语言 | 稳定支持 11 种：中、英、阿、法、德、意、日、韩、葡、俄、西 | 其他语言支持程度不一
+[表格2]
+Checkpoint | 支持任务 | 输入条件 | 输出
+H3-Base-FL2VA | 文生视频（T2VA）、首帧/尾帧/首尾帧生视频（FL2VA） | 文本；可选 0、1 或 2 张图像 | 视频和音频
+H3-Base-Ref2VA | 全模态参考生视频（Ref2VA） | 文本 + 参考图像（≤9 张）、参考视频（≤3 段，每段 2—15 秒，总时长≤15 秒）、参考音频（≤3 段）；全部文件合计≤12 个 | 视频和音频
+[表格3]
+组件 | 文件 | ComfyUI 目录
+FL2VA 扩散模型（T2V/I2V 用） | minimax_h3_fl2va_pruned_int8_convrot.safetensors | models/diffusion_models/
+Ref2VA 扩散模型（R2V 用） | minimax_h3_ref2va_pruned_int8_convrot.safetensors | models/diffusion_models/
+文本编码器 | qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors | models/text_encoders/
+视频 VAE | minimax_h3_video_vae_fp16.safetensors | models/vae/
+音频 VAE | minimax_h3_audio_vae_fp32.safetensors | models/vae/
+可选工作流 LoRA | FL2V 8-step 或 Ref2V 4-step LoRA | models/loras/
+[表格4]
+模式 | 全称 | 输入 | 写法要点
+T2VA | 文生视频 | 纯文本 | 直接以三字段开头，无图像对齐指令
+I2VA | 首帧生视频 | 文本 + 1 张首帧图 | 首行写图像对齐指令，从首帧向前发展
+FL2VA | 首尾帧生视频 | 文本 + 首帧 + 尾帧 | 首行写对齐指令，描述两帧之间连续可见的变化路径
+L2VA | 尾帧生视频 | 文本 + 1 张尾帧图 | 首行写对齐指令，推断合理的前置状态并收敛到尾帧
+[表格5]
+字段 | 职责 | 写法约束
+integrated_multimodal_description | 主字段：沿时间线描述画面与场景内声音 | 风格、构图、主体、动作、镜头、说话人、逐字对白、歌声、同步音效；[Shot 1] 无时间戳，后续镜头用 [Shot N] At MM:SS.mmm 标记
+overall_soundscape | 全片氛围声、物理动作声、非语言人声 | 1—4 句英文连续段落；不重复对白与配乐；要求全程静音时才写 N/A
+non_diegetic_music | 观众专属配乐（角色听不到） | 1—3 句；描述乐器、速度、节奏、力度变化；不使用抽象情绪词；无配乐写 N/A
+[表格6]
+维度 | 可用表达 | 含义
+运动类型 | Zoom In / Zoom Out | 机身不动，焦距变化（变焦）
+运动类型 | Push In / Pull Out | 机身整体前推 / 后拉
+运动类型 | Truck Left / Truck Right | 机身整体横向平移
+运动类型 | Pedestal Up / Pedestal Down | 机身整体上升 / 下降
+运动类型 | Pan Left / Pan Right | 机位不动，镜头水平转动（摇）
+运动类型 | Tilt Up / Tilt Down | 机位不动，镜头垂直转动（俯仰）
+运动类型 | Arc Shot | 沿弧线环绕主体
+运动类型 | Tracking Shot | 跟随运动主体
+运动类型 | POV | 主体视角
+运动类型 | Roll Clockwise / Roll Counterclockwise | 绕镜头光轴旋转
+运动类型 | Shake Slightly / Shake Strongly | 轻微 / 强烈手持晃动
+运动类型 | Static Shot | 机位与镜头完全静止
+幅度 | with small amplitude / with large amplitude | 小幅度构图变化 / 大幅度构图变化
+速度 | at slow speed / at fast speed | 慢速移动 / 快速移动
+[表格7]
+层级 | 内容 | 写入位置
+场景同步声（diegetic） | 关门声、台词、广播、收音机、画内乐器等角色能听到的声音 | integrated_multimodal_description 时间线中
+整体声景（soundscape） | 风、雨、交通、脚步声、织物摩擦、撞击、呼吸、笑声等贯穿全片的氛围与物理声 | overall_soundscape
+非剧情配乐（non-diegetic） | 只有观众能听到的配乐 | non_diegetic_music（描述乐器、速度、节奏、力度）
+[表格8]
+标签 | 含义 | 使用时机
+<Subject N> | 从参考素材中提取、可在目标视频中复用的可见内容单元（人、动物、物体、场景、服装、道具、风格、动作、姿态、特效） | 只要该内容单元被使用就定义；一个 Subject 可由多个素材共同定义
+<Picture N> | 作为具体帧锚点的参考图：首帧、关键帧、尾帧、剪辑关键帧、分镜构图锚点 | 图像本身锚定某一帧或提供分镜规划时才建独立行；仅定义角色/场景/服装的图在 Subject 定义内引用即可
+<Video N> | 作为整段视频来源的参考视频：剪辑、续接、运镜/切点/节奏结构 | 源视频承担「整段视频」角色时才定义；从中提取的人物仍归 Subject
+<Audio N> | 被复制或参考的音频信号 | 音频有积极使用角色（完全/部分复制，或参考音色/配乐/台词/音效/节拍）时才定义；视频自带声音不自动产生 Audio 标签
+[表格9]
+任务类型 | 适用场景
+keyframe completion | 图像作为首帧、关键帧、尾帧、剪辑关键帧等具体帧锚点
+reference generation | 素材只提供角色/场景/风格/动作/运镜/分镜/声音等生成参考，不被直接剪辑或续接
+video editing | 直接修改现有源视频（在静态图之间插值不算视频剪辑）
+video continuation | 新内容从现有源视频继续、延伸、接续或转场
+audio reuse | 同一音频信号全部或部分复用
+audio reference | 不复制信号，仅参考音色、语速、配乐风格、歌词、音效质感、节拍或连续性
+[表格10]
+类别 | 标记 | 含义
+视觉 | fully_preserved | 参考内容的定义性角色与特征完整保留
+视觉 | partially_preserved | 仍使用但改变或省略了部分定义特征
+视觉 | attribute_transfer | 把可辨识属性（动作、风格、姿态、构图、效果）转移到不同目标主体
+视觉 | weak_reference | 只保留宽泛类别、氛围、构图族或风格近似
+音频 | fully_copy | 完整源音频作为目标最终音轨
+音频 | partially_copy | 只复制部分时间范围或音轨层，或复制后增删替换其他声音
+音频 | reference | 不复制信号，仅参考音色、节奏、配乐风格、台词内容或声音质感
+音频 | weak_reference | 仅保留宽泛声音类别或氛围
+[表格11]
+字段 | 用途 | 消费方
+task_type | 任务模式，决定 ComfyUI 模板（T2V/I2V/R2V） | 工作流调度
+video_prompt | 最终 H3 提示词全文 | ComfyUI 提示词输入框 / API prompt 参数
+material_image_prompts | 四类素材图的文生图提示词 | 文生图模型（如 FLUX/SD/即梦）
+character_sheet | 角色 ID、外貌、服装、声线登记 | 项目角色库，跨场景复用
+notes | 素材准备清单与注意事项 | 创作者执行
+[表格12]
+Speaker ID | 角色 | 外貌特征 | 服装 | 声线 | 参考图
+S1 | 林夏 | 黑色长发、冷白皮、眼神锐利 | 深灰西装裙 | 清冷、语速偏慢 | 人物图-林夏.png
+S2 | 顾言 | 短发、轮廓硬朗、眉骨高 | 黑色高领衫 | 低沉、克制 | 人物图-顾言.png
+[表格13]
+类型 | 在 H3 流程中的用途 | 典型提示词诉求
+人物图 | Ref2VA 锁定角色身份与服装；I2VA 首帧人物 | 脸部清晰、可辨识、单一主体、服装完整
+场景图 | I2VA 首帧环境；Ref2VA 场景参考；氛围锁定 | 环境完整、光线色调明确、无杂乱人物
+道具图 | Ref2VA 道具外观参考；特写镜头的物体 | 材质/形状/颜色/文字精确、主体突出
+分镜图 | FL2VA 首尾帧锚点；Ref2VA 构图/分镜参考 | 故事板风格、景别与构图明确、运镜方向可读
+[表格14]
+光线类型 | 适用场景 | 关键词
+自然光 | 户外、真实温暖 | sunlight, moonlight, starlight, golden hour
+逆光 | 剪影、轮廓光、戏剧性 | backlight, rim light, silhouette
+霓虹光 | 城市夜景、赛博朋克 | neon light, neon glow
+柔光 | 人像、肤质柔和 | soft light, softbox, diffused light
+硬光/侧光 | 戏剧冲突、立体结构 | hard light, side light, harsh shadows
+伦勃朗光 | 经典电影人像 | Rembrandt lighting
+顶光 | 冷峻、压迫感 | top light, overhead light
+暖光灯 | 室内温馨、怀旧 | warm lamp, candlelight, firelight
+[表格15]
+风格 | 关键词
+电影感写实 | cinematic, film grain, anamorphic, shallow depth of field, 35mm
+2D 动画 | 2D-animated, anime, cel shading, studio ghibli style
+3D CG | 3D CG, pixar style, octane render, blender render
+黏土/定格 | claymation, stop-motion, handcrafted
+水彩 | watercolor, soft brush, paper texture
+复古胶片 | vintage film, kodak portra, analog, 1970s
+黑色电影 | film noir, high contrast, low key, chiaroscuro
+赛博朋克 | cyberpunk, neon, rainy night, futuristic city
+古装武侠 | wuxia, ink wash painting, misty bamboo forest, hanfu
+哥特 | gothic, candlelight, dark castle, victorian
+纪录片 | documentary, handheld, natural light, realistic
+漫画/条漫 | manhua, webtoon, bold lineart, flat colors
+[表格16]
+节拍 | 作用 | 时间 | 写法要点
+冷开场 | 直接空降到冲突正中，绝不从故事开头讲起 | 0—3 秒 | 开场即动作/对峙/异常状态
+揭示 | 秘密、耳光、合同、戒指——某样东西易手或曝光 | 3—8 秒 | 道具或信息在这个窗口完成交换
+反转 | 权力翻盘：被看不起的继承人是 CEO，女佣是千金 | 8—13 秒 | 用反应镜头承载反转
+掐断 | 在节拍中途收尾，一句话悬着——让人点进去的悬崖 | 13—15 秒 | 台词说完瞬间硬切黑场最有效
+[表格17]
+问题 | 原因 | 修复
+声音是编造/错误的声音 | 没有指定音频，模型自行生成 | 补一行音频指示：声音 + 环境声 + 排除项（no music）
+出现了不想要的配乐 | 以为不写就是无声 | 显式写 no music 或 non_diegetic_music: N/A
+台词结束后嘴还在动 | 没有给镜头收尾动作 | 台词后加一个收尾节拍：小动作、移开视线、微笑
+口型对不上 | 视觉与音频描述的时机不一致 | 一镜头一声音一主角；说话期间稳住镜头
+模型自己加了运镜 | 没有排除 | 写句子：camera remains completely static throughout
+部分指令没执行 | 一次要求太多，15 秒装不下四个节拍 | 砍到一个清晰节拍；每 3 秒只安排一个可观察动作
+宽镜头口型不可读 | 人脸在画面里太小 | 说话角色用中景或更近；宽镜头只用于定场，不用于说话
+[表格18]
+段 | 职责 | 写法
+核心主题 | 一句话说清拍什么 | 一个可观察的事件或状态，不是抽象主题
+人物 | 谁在画面里、长什么样、怎么动 | 外貌、服装、姿态、动作链
+氛围 | 光线、色调、环境声定调 | 用可观察的光线/色调/声音表达情绪
+运镜 | 镜头怎么动 | 运动类型 + 幅度 + 速度（见 3.4 词库）
+分镜 | 画面按什么顺序切换 | [Shot N] At MM:SS.mmm 切点 + 景别变化
+[表格19]
+题材 | 运镜 | 光线 | 色调 | 声音 | 关键词
+悬疑/惊悚 | 缓推、窥视 POV、荷兰角 | 低照度、侧硬光 | 冷灰、高对比 | 低鸣氛围、心跳感 | low key, chiaroscuro, dutch angle, suspense
+恐怖 | 手持抖动、缓推、快速变焦 | 闪烁光源、顶光 | 暗青、暗红 | 环境低噪、突响 | horror, flickering light, found footage
+古装武侠 | 拉镜、环绕、升镜 | 月光、烛光、雾气 | 水墨青灰 | 风声、竹林、衣料 | wuxia, ink wash, mist, hanfu
+都市情感/豪门 | 缓推、过肩、环绕 | 暖光、窗光 | 暖棕、蓝橙对比 | 城市底噪、钢琴 | romance, luxury interior, warm light
+科幻太空 | 缓拉、大广角、静镜 | 冷蓝环境光、舷窗光 | 深蓝黑 | 舱体低鸣、真空静音 | sci-fi, starship, zero-g, vacuum silence
+赛博朋克 | 横移、俯冲、跟踪 | 霓虹光、雨夜反光 | 蓝紫粉 | 城市嗡鸣、合成器 | cyberpunk, neon, rainy night
+哥特 | 缓推、硬切黑 | 烛光、月光、阴影 | 暗金、深红 | 风声、烛火、无配乐 | gothic, candlelight, victorian
+史诗战争 | 升降、大广角、拉镜 | 自然光、逆光 | 高饱和暖色 | 管弦乐、低音炮 | epic, crane shot, wide establishing
+治愈日常 | 定镜、缓推 | 柔光、自然光 | 暖白、低饱和 | 环境白噪、轻吉他 | cozy, soft light, daily life
+纪录片/口播 | 手持、定镜 | 自然光 | 真实中性 | 现场收音、无配乐 | documentary, handheld, authentic
+[表格20]
+失败现象 | 原因 | 精确修复
+所有模式套用一个公式 | Base 与 Full-Reference 是两种结构 | Base 用三字段；Full-Reference 用六段；写之前先判定任务
+把每个上传文件都当 Subject | 文件是容器，Subject 是提取的内容单元 | 人物/场景/动作用 Subject；帧锚点用 Picture；整段视频用 Video；音频用 Audio
+首尾帧被当成两张静态图 | 没有描述两帧之间的变化路径 | 写连续可观察的中间变化，直到姿态、构图、光线收敛到 Picture 2
+小构图变化也切镜 | 每次切镜都会重置主体状态 | 距离/角度变化用推拉摇移；只有新信息才切镜
+台词从错误角色嘴里说出 | 角色描述没有绑定稳定声源 ID | 按发声顺序分配 (S1)(S2)，身份/语气放 <d> 外，<d> 内只放语言+台词
+音乐/环境声/对白混在一起 | 三个声音层放错位置 | 场景同步声进时间线，氛围声进 overall_soundscape，配乐进 non_diegetic_music
+参考保真度宣称了但没兑现 | keep consistent 没有定义哪些特征算成功 | 在 subject_definitions 点名身份定义特征，用正确 retention 标记，并在生效镜头引用
+提示词读起来像剧情概括 | 只有意义没有生产信息 | 每镜写清构图、主体位置、可见动作、状态变化、运镜、同步声音
+对白超长导致赶语速/截断 | 字数超出时长预算 | 约每秒 2.5 个英文词；超长台词拆成多镜头或缩短
+时间戳超出片长 | 先写内容后定时长 | 先定总时长，再排切点，最后写内容
+画外音人物嘴在动 | 缺嘴唇闭合说明 | voiceover 后紧跟 while his/her lips remain completely closed
+本地生成质量低于官方 API | 本地 H3-Base 没有 Context-IR 与 2K | 严格按本手册结构化提示词；2K 走官方 Regenerate-2K API
+[表格21]
+资源 | 地址 | 用途
+H3 开源公告（中文） | minimaxi.com/news/minimax-h3-open-source | 模型能力、架构、工作流总览
+H3 模型卡（Hugging Face） | huggingface.co/MiniMaxAI/MiniMax-H3 | checkpoint、可复现案例、脚本
+Base 提示词指南 | huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_base_en.md | T2VA/I2VA/FL2VA/L2VA 官方规范
+Ref 提示词指南 | huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/docs/VIDEO_PROMPT_WRITING_GUIDE_ref_en.md | Ref2VA 六段官方规范
+官方提示词 Skills 仓库 | github.com/MiniMax-AI/MiniMax-H3/tree/main/skills | h3-prompt-writing 与 8 个风格化生成 Skill
+本地部署指南 | platform.minimaxi.com/docs/guides/local-deploy-h3 | ComfyUI/SGLang 部署与参数
+在线体验 | hailuoai.com ｜ hub.minimaxi.com | H3 直出与 2K 对比
+社区短剧指南 | pixo.video/zh/blog/ai-short-drama | 竖屏短剧钩子实战
+社区口播指南 | minimaxh3.co/blog/minimax-h3-lip-sync | 口型同步实测与避坑
+社区结构化指南 | deapi.ai/blog/minimax-h3-prompting-guide-how-to-write-structured-prompts-for-text-to-video | 三字段详解与前后对比
+[表格22]
+中文 | 英文 | 说明
+文生视频 | T2VA（Text-to-Audio-Video） | 纯文本生成音视频
+首帧生视频 | I2VA | 首帧图 + 文本
+首尾帧生视频 | FL2VA | 首尾两帧 + 文本
+尾帧生视频 | L2VA | 尾帧图 + 文本
+全参考生视频 | Ref2VA | 参考图/视频/音频 + 文本
+整体多模态描述 | integrated_multimodal_description | 三字段之一，主时间线
+整体声景 | overall_soundscape | 三字段之一，氛围与物理声
+非剧情配乐 | non_diegetic_music | 三字段之一，观众专属配乐
+主题定义 | subject_definitions | 六段格式第一段
+摘要 | summary | 六段格式第二段
+保留分析 | retention_analysis | 六段格式第三段
+详细描述 | detailed_description | 六段格式第四段
+说话人编号 | (S1) / (S2) | 发声顺序分配的稳定 ID
+对白标签 | <d>[语言] 台词</d> | 只放语言与逐字台词
+切镜 | cut | 引入新信息的镜头切换
+推/拉/摇/移/升降 | Push/Pull/Pan/Truck/Pedestal | 镜头运动类型

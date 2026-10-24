@@ -1,0 +1,598 @@
+{
+  "id": "bcu-fusion-smart-director",
+  "revision": 0,
+  "last_node_id": 28,
+  "last_link_id": 10,
+  "nodes": [
+    {
+      "id": 20,
+      "type": "MiniMaxH3SmartDirector",
+      "pos": [
+        40,
+        60
+      ],
+      "size": [
+        300,
+        560
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "导演组",
+          "type": "MMX_DIR_GROUP",
+          "links": [
+            6
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "Smart计划",
+          "type": "MINIMAX_H3_SMART_PLAN",
+          "links": [],
+          "slot_index": 1
+        },
+        {
+          "name": "接线提示",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 2
+        },
+        {
+          "name": "整片提示词",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 3
+        },
+        {
+          "name": "分镜表",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 4
+        },
+        {
+          "name": "镜头数",
+          "type": "INT",
+          "links": [],
+          "slot_index": 5
+        },
+        {
+          "name": "总时长",
+          "type": "FLOAT",
+          "links": [],
+          "slot_index": 6
+        },
+        {
+          "name": "总帧数",
+          "type": "INT",
+          "links": [],
+          "slot_index": 7
+        },
+        {
+          "name": "检查报告",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 8
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3SmartDirector"
+      },
+      "widgets_values": [
+        "{\n  \"version\": 1,\n  \"project\": {\n    \"title\": \"未命名 MiniMax H3 短片\",\n    \"logline\": \"一个清晰、有镜头调度和声音设计的短片片段。\",\n    \"style\": \"电影感，真实自然，运动连续，音画同步，细节稳定\",\n    \"characters\": \"\",\n    \"world\": \"\"\n  },\n  \"shots\": [\n    {\n      \"id\": \"shot-001\",\n      \"enabled\": true,\n      \"title\": \"开场\",\n      \"scene\": \"写下场景地点\",\n      \"duration\": 5.0,\n      \"shot_size\": \"中景\",\n      \"camera\": \"缓慢推进\",\n      \"action\": \"描述主体动作、环境变化和情绪方向\",\n      \"dialogue\": \"\",\n      \"sound\": \"自然环境声，与动作同步\",\n      \"lighting\": \"自然电影光\",\n      \"transition\": \"直接切换\",\n      \"continuity\": true,\n      \"avoid\": \"字幕，水印，文字，画面抖动，人物变形，肢体错乱\"\n    }\n  ]\n}",
+        "auto 智能判断",
+        "中文",
+        "",
+        5.0,
+        "全部",
+        true,
+        true,
+        true,
+        false,
+        "自动（超过15秒按10秒）",
+        true,
+        "关闭",
+        "auto 根据生成模式",
+        "强化镜头语言、动作连续性、主体一致性、声音同步和画面清晰度，避免字幕水印和人物变形。",
+        "Qwen3.8 27B｜图像+视频帧｜apache-2.0",
+        "Qwen3.8-27B-ABLITERATED-Q5_K_M.gguf",
+        "mmproj-Qwen3.8-27B-ABLITERATED-F16.gguf",
+        42,
+        true,
+        "https://api.openai.com/v1/chat/completions",
+        "",
+        "gpt-4.1-mini"
+      ],
+      "title": "① SmartDirector：中文剧本 → AI 分镜 + 导演组"
+    },
+    {
+      "id": 21,
+      "type": "UNETLoader",
+      "pos": [
+        40,
+        400
+      ],
+      "size": [
+        300,
+        140
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            1
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "UNETLoader"
+      },
+      "widgets_values": [
+        "minimax_h3_ref2va_pruned_int8_convrot.safetensors",
+        "default"
+      ],
+      "title": "② 扩散模型（ref2va，参考生视频）"
+    },
+    {
+      "id": 22,
+      "type": "LoraLoaderModelOnly",
+      "pos": [
+        360,
+        400
+      ],
+      "size": [
+        300,
+        140
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 1
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            2
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "LoraLoaderModelOnly"
+      },
+      "widgets_values": [
+        "minimax_h3_fl2v_lightx2v_turbo_4step_v0.1_comfy_resized_avg_rank_21_bf16.safetensors",
+        0.75
+      ],
+      "title": "③ turbo LoRA（加速）"
+    },
+    {
+      "id": 23,
+      "type": "CLIPLoader",
+      "pos": [
+        40,
+        620
+      ],
+      "size": [
+        300,
+        160
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            3
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CLIPLoader"
+      },
+      "widgets_values": [
+        "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+        "minimax",
+        "default"
+      ],
+      "title": "④ 文本编码器"
+    },
+    {
+      "id": 24,
+      "type": "VAELoader",
+      "pos": [
+        40,
+        820
+      ],
+      "size": [
+        300,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            4
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_video_vae_fp16.safetensors"
+      ],
+      "title": "⑤ 视频 VAE"
+    },
+    {
+      "id": 25,
+      "type": "VAELoader",
+      "pos": [
+        360,
+        820
+      ],
+      "size": [
+        300,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            5
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "VAELoader"
+      },
+      "widgets_values": [
+        "minimax_h3_audio_vae_fp32.safetensors"
+      ],
+      "title": "⑥ 音频 VAE"
+    },
+    {
+      "id": 26,
+      "type": "MiniMaxH3Director",
+      "pos": [
+        700,
+        60
+      ],
+      "size": [
+        300,
+        600
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 2
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 3
+        },
+        {
+          "name": "video_vae",
+          "type": "VAE",
+          "link": 4
+        },
+        {
+          "name": "audio_vae",
+          "type": "VAE",
+          "link": 5
+        },
+        {
+          "name": "r2v_groups",
+          "type": "MMX_DIR_GROUP",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "links": [
+            7
+          ],
+          "slot_index": 0
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "links": [
+            8
+          ],
+          "slot_index": 1
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "links": [
+            9
+          ],
+          "slot_index": 2
+        },
+        {
+          "name": "frame_count",
+          "type": "INT",
+          "links": [],
+          "slot_index": 3
+        },
+        {
+          "name": "source_images",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 4
+        },
+        {
+          "name": "report",
+          "type": "STRING",
+          "links": [],
+          "slot_index": 5
+        },
+        {
+          "name": "images_pre_refine",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 6
+        },
+        {
+          "name": "images_pre_face_refine",
+          "type": "IMAGE",
+          "links": [],
+          "slot_index": 7
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "MiniMaxH3Director"
+      },
+      "widgets_values": [
+        "r2v",
+        "A cinematic scene with natural motion and synchronized ambience",
+        "采样设置",
+        1.0,
+        0,
+        24.0,
+        864,
+        480,
+        864,
+        124,
+        "",
+        "高级采样",
+        25,
+        "euler",
+        "simple",
+        12.0,
+        3.0,
+        "性能",
+        true,
+        false,
+        false,
+        "raw",
+        false,
+        false,
+        ""
+      ],
+      "title": "⑦ Director 执行引擎（真实出片）"
+    },
+    {
+      "id": 27,
+      "type": "CreateVideo",
+      "pos": [
+        1040,
+        60
+      ],
+      "size": [
+        300,
+        180
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 7
+        },
+        {
+          "name": "audio",
+          "type": "AUDIO",
+          "link": 8
+        },
+        {
+          "name": "fps",
+          "type": "FLOAT",
+          "link": 9
+        }
+      ],
+      "outputs": [
+        {
+          "name": "VIDEO",
+          "type": "VIDEO",
+          "links": [
+            10
+          ],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "CreateVideo"
+      },
+      "widgets_values": [
+        30.0,
+        "auto",
+        "sRGB",
+        "none"
+      ],
+      "title": "⑧ 合成视频"
+    },
+    {
+      "id": 28,
+      "type": "SaveVideo",
+      "pos": [
+        1040,
+        300
+      ],
+      "size": [
+        300,
+        120
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "link": 10
+        }
+      ],
+      "outputs": [
+        {
+          "name": "video",
+          "type": "VIDEO",
+          "links": [],
+          "slot_index": 0
+        }
+      ],
+      "properties": {
+        "Node name for S&R": "SaveVideo"
+      },
+      "widgets_values": [
+        "BetterComfyUI/fusion_C"
+      ],
+      "title": "⑨ 保存成片"
+    }
+  ],
+  "links": [
+    [
+      1,
+      21,
+      0,
+      22,
+      0,
+      "MODEL"
+    ],
+    [
+      2,
+      22,
+      0,
+      26,
+      0,
+      "MODEL"
+    ],
+    [
+      3,
+      23,
+      0,
+      26,
+      1,
+      "CLIP"
+    ],
+    [
+      4,
+      24,
+      0,
+      26,
+      2,
+      "VAE"
+    ],
+    [
+      5,
+      25,
+      0,
+      26,
+      3,
+      "VAE"
+    ],
+    [
+      6,
+      20,
+      0,
+      26,
+      4,
+      "MMX_DIR_GROUP"
+    ],
+    [
+      7,
+      26,
+      0,
+      27,
+      0,
+      "IMAGE"
+    ],
+    [
+      8,
+      26,
+      1,
+      27,
+      1,
+      "AUDIO"
+    ],
+    [
+      9,
+      26,
+      2,
+      27,
+      2,
+      "FLOAT"
+    ],
+    [
+      10,
+      27,
+      0,
+      28,
+      0,
+      "VIDEO"
+    ]
+  ],
+  "groups": [],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.85,
+      "offset": [
+        0,
+        0
+      ]
+    }
+  },
+  "version": 0.4
+}

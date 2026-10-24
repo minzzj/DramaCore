@@ -1,0 +1,37 @@
+好的，以下是按【输出契约】拆解出的 JSON（只包含本次新增素材）：
+
+```json
+{
+  "title": "雪夜长街",
+  "chapters": [
+    {
+      "chapter_id": "CH001",
+      "title": "雪夜",
+      "segments": [
+        {
+          "segment_index": 1,
+          "prompt": "integrated_multimodal_description: [Shot 1] Live-action, cinematic, a young swordsman in white robes walks alone down a snowy street at night. overall_soundscape: Wind howls across the empty street. non_diegetic_music: Low sustained strings at a slow tempo.",
+          "asset_refs": ["A1", "A2"],
+          "duration_s": 10
+        }
+      ]
+    }
+  ],
+  "assets": [
+    {
+      "id": "A1",
+      "asset_type": "CHARACTER",
+      "name": "林澈",
+      "prompt": "Chinese young swordsman, early 20s, long black hair tied up, white linen robe with dark sash, cinematic portrait, medium shot, cold moonlight key light"
+    },
+    {
+      "id": "A2",
+      "asset_type": "SCENE",
+      "name": "雪夜长街",
+      "prompt": "Ancient Chinese street at night under heavy snow, stone-paved road, red lanterns, cold blue moonlight, cinematic wide shot"
+    }
+  ]
+}
+```
+
+说明：素材共 2 个（角色 1 / 场景 1），视频段 1 个；如需改成 5 个分镜请告诉我。

@@ -1,0 +1,41 @@
+# ---- 运行数据（绝不提交）----
+projects/
+!projects/.gitkeep
+
+# ---- 本地运行环境（体积大、机器相关，绝不提交）----
+.comfyenv/
+.comfyui/
+_comfyui_tmp/
+_comfyui_download.zip
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ---- 测试与缓存 ----
+.pytest_cache/
+tests/verify/_last_run.json
+tests/verify/_contracts_report.json
+.coverage
+htmlcov/
+
+# ---- 临时文件（原子写遗留）----
+*.tmp
+.*.lock
+*.lock
+
+# ---- 密钥：绝不提交真实 API key ----
+config/user.yaml
+.env
+*.key
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+config/user.yml
+dist/*.zip
