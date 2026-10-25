@@ -1132,18 +1132,38 @@ class BetterComfyUIOneStop:
             _fixed_mode, _fixed_n = False, 1
         if _fixed_mode:
             _fixed_sec = float(每段时长_秒)
+            # ROUND85：对齐外部高质量工作流——长段允许段内切镜（外部 15s 段有 2–3 个 [Shot]），
+            # 短段/固定单段仍保持单镜；不改工作流参数，只改运行约束文本。
+            _max_shots = max(1, int(_fixed_sec // 3.0))
+            _multi_shot = _fixed_sec >= 10.0 and _max_shots >= 2
             _realism = (
                 "遵守通用物理真实感：所有场景/道具按现实尺度、重量和反射规律表现，"
                 "透明/反光材质要有真实厚度与接触阴影；人物皮肤/手/衣料真实，"
                 "禁止塑料/CGI/悬浮/透明人感；不要无依据放大背景装饰/参考图局部成主体。")
+            if _multi_shot:
+                _shot_rule = (
+                    f"本段允许 1—{_max_shots} 个镜头（10 秒以上建议 2—3 个，单镜至少 3 秒）；"
+                    f"第 1 个镜头不写时间戳，后续镜头用 [Shot N] At 00:SS.mmm, the camera cuts to ...；"
+                    f"禁止超过本段时长。\n")
+                _dialogue_rule = (
+                    "所有动作/台词必须落在本段时长内；按实际语速给对白留呼吸，"
+                    "优先保留完整台词时间线，不要为了塞动作压缩台词。\n")
+            else:
+                _shot_rule = (
+                    f"因此只写一个连续镜头；禁止写多个 [Shot]、禁止写超过 {_fixed_sec:.3f}s 的 at 时间码；\n")
+                _dialogue_rule = "所有动作/台词必须在这个时长内完成，台词只保留能在此时间内说完的一小段；\n"
+            _length_rule = (
+                "长段正文允许 260—360 个英文词（外部 15s 样片约 298—341 词）；"
+                "优先保留动作/台词/声音细节，不要堆形容词。\n"
+                if _multi_shot else "")
             if _fixed_n == 1:
                 _ai_script = (_ai_script.rstrip() +
                               f"\n\n【本次运行硬约束（最高优先级，覆盖上文）】\n"
                               f"本次只生成一个固定时长片段：{_fixed_sec:.3f} 秒（H3 24fps，合法帧数网格）。\n"
-                              f"因此只写一个连续镜头；禁止写多个 [Shot]、禁止写超过 {_fixed_sec:.3f}s 的 at 时间码；\n"
-                              f"所有动作/台词必须在这个时长内完成，台词只保留能在此时间内说完的一小段；\n"
-                              f"{_realism}")
-                audit.append(f"提示词运行约束：固定单段 {_fixed_sec:.3f}s → 已向 AI 追加单镜头/现实感硬约束")
+                              f"{_shot_rule}{_dialogue_rule}{_length_rule}{_realism}")
+                audit.append(
+                    f"提示词运行约束：固定单段 {_fixed_sec:.3f}s → "
+                    + ("允许段内多镜头/现实感硬约束" if _multi_shot else "单镜头/现实感硬约束"))
             else:
                 _ai_script = (_ai_script.rstrip() +
                               f"\n\n【本次运行硬约束（最高优先级，覆盖上文）】\n"
@@ -1151,11 +1171,11 @@ class BetterComfyUIOneStop:
                               f"每段 duration_s = {_fixed_sec:.3f} 秒，合计 {_fixed_n * _fixed_sec:.3f} 秒。\n"
                               f"按剧情推进把这 {_fixed_n} 段拆成不同的连续镜头（不同景别/动作/台词/机位），"
                               f"禁止只输出 1 段、禁止所有段落重复同一镜头；内容不足时补足合理细节而不是合并成一段；\n"
-                              f"每段只写一个连续镜头，不要写多个 [Shot]；\n"
-                              f"{_realism}")
+                              f"{_shot_rule}{_dialogue_rule}{_length_rule}{_realism}")
                 audit.append(
-                    f"提示词运行约束：固定 {_fixed_n} 段 × {_fixed_sec:.3f}s → 已要求 AI 输出恰好 "
-                    f"{_fixed_n} 段不同镜头（不足会补细节，不再靠程序循环复用）")
+                    f"提示词运行约束：固定 {_fixed_n} 段 × {_fixed_sec:.3f}s → "
+                    + ("允许段内多镜头（最多 {} 镜/段）".format(_max_shots) if _multi_shot else "每段单镜头")
+                    + f"，已要求输出恰好 {_fixed_n} 段（不足会补细节，不再靠程序循环复用）")
         _groups, _script, prompt_json, _asset_lines, everything_audit = BetterComfyUIEverything().run(
             剧本=_ai_script, 项目=项目, 统一风格=统一风格, 每段时长_秒=float(每段时长_秒),
             系统提示词选择=_sys_label, 自定义系统提示词=_custom_prompt,
