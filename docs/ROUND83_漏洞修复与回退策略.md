@@ -36,3 +36,10 @@
 - 远端 GitHub 代码 `compile()` 通过；
 - 两个内测工作流浏览器加载：`widgets=121 / values=120 / 无 SchemaGuard 横幅 / 无 JS 报错`；
 - 未启动 GPU 实跑，GPU 项需目标机验证。
+
+
+## ROUND85 · 外部提示词对齐（内测版）
+- 长段（≥10s）允许多镜头：推荐 2—3 镜、每镜≥3s，切点带 `[Shot N] At 00:SS.mmm`；
+- 长段词数上限 300→360，V3 契约 A2.5/A4.5/A14 C10 同步；
+- 短段/稳定版行为不变；
+- 仍不能保证与外部一致：模型族（ref2va vs fl2va）、无 SageAttention、编码链次数不同，需 A/B。
