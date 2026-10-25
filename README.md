@@ -19,16 +19,47 @@
 - **前端自动兼容**：旧工作流参数自动修复，不再弹「参数与插件节点不一致」拦截框；
 - **稳定出片参数**：默认【真实参数版】1344×768 / 8 步 / ref2v 8step LoRA；【快速4步版】1152×640 / 4 步。
 
-## 安装
+## 安装（3 分钟）
 
-1. 安装 ComfyUI（开发验证 0.41 / 目标机 0.33）；
-2. 把 `bettercomfyui_comfy/` 复制到 `ComfyUI/custom_nodes/`；
-3. 把 `bettercomfyui/` 放到可被 import 的位置（或与插件同级的仓库根目录）；
-4. 启动 ComfyUI 时设置 `BETTERCOMFYUI_HOME=<本仓库目录>`；
-5. 复制 `config/user.yaml.example` → `config/user.yaml`，填写 API Key（也可在面板里配置）；
-6. 重启 ComfyUI。
+**推荐用一键安装器**（Windows / Linux / macOS 同一套核心；默认 dry-run 不写文件，确认后加 `-Yes` / `--yes`）：
 
-**模型要求**：H3 UNET / CLIP / 视频/音频 VAE / Turbo LoRA；素材生图需 SDXL 类模型。模型权重不在本仓库。
+**1. 获取代码**（git clone 或下载 ZIP）：
+
+```bash
+git clone https://github.com/minzzj/DramaCore.git
+cd DramaCore
+```
+
+ZIP：<https://github.com/minzzj/DramaCore/archive/refs/heads/main.zip>
+
+**2. 先看安装计划**（不写任何文件）：
+
+```powershell
+# Windows：把 D:\ComfyUI 换成你的 ComfyUI 路径
+powershell -ExecutionPolicy Bypass -File .\install\install_windows.ps1 -Mode attach -ComfyUI "D:\ComfyUI" -DryRun
+```
+```bash
+# Linux / macOS
+chmod +x install/install_linux.sh
+./install/install_linux.sh --mode attach --comfyui /opt/ComfyUI --dry-run
+```
+
+**3. 正式安装**：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install\install_windows.ps1 -Mode attach -ComfyUI "D:\ComfyUI" -Yes
+```
+```bash
+./install/install_linux.sh --mode attach --comfyui /opt/ComfyUI --yes
+```
+
+安装器会：检测 GPU/后端/显存 → 安装依赖 → 把插件与编排包放到正确位置 → 生成启动器（`start_dramacore.bat` / `.sh`）；**不会下载模型**。
+
+**4. 模型 + API Key + 启动 + 工作流** → 完整步骤见 **[docs/安装指南_用户版.md](docs/安装指南_用户版.md)**。
+
+> 还没有 ComfyUI？用 `-Mode bootstrap` / `--mode bootstrap` 自动准备 ComfyUI（仍不含模型）。
+> 想手动安装：见用户指南第 3 节。
+
 
 ## 完整工作流
 
@@ -73,7 +104,7 @@
 
 ![导演台 / V3 提示词面板](docs/images/director-panel-v3.png)
 
-![GitHub 仓库验证](docs/images/github-api-verify.png)
+![GitHub 仓库主页](docs/images/repo-main.png)
 
 ## 文档
 
@@ -83,9 +114,3 @@
 - [面板配置说明](docs/剧核_DramaCore_面板配置说明.md)
 - [发布说明 v0.2.0](docs/发布说明_v0.2.0-internal.md)
 - [更新日志](CHANGELOG.md)
-
-## 宣传片
-
-🎬 [剧核 DramaCore 宣传片（68 秒，BGM 版 / 静音版）](https://github.com/minzzj/DramaCore/releases/tag/v0.2.0-internal)
-
-![宣传片封面](docs/images/promo-poster.jpg)
