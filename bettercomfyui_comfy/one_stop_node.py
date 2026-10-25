@@ -1621,6 +1621,14 @@ class BetterComfyUIOneStop:
             "系统提示词选择": str(系统提示词选择),
             "tiled_n_tiles": int(_tiled_info.get("n_tiles") or 0),
             "tiled_overlap_pixels": int(_tiled_info.get("overlap_pixels") or 64),
+            # P1-2 修复：断点续跑指纹必须包含素材/首尾帧/参考音视频/音频模式，
+            # 否则改素材或改参考输入后仍会命中旧批次缓存。
+            "asset_refs": [str(p) for p in (asset_paths or [])],
+            "首帧图片路径": str(首帧图片路径 or ""),
+            "尾帧图片路径": str(尾帧图片路径 or ""),
+            "参考视频路径": str(参考视频路径 or ""),
+            "参考音频路径": str(参考音频路径 or ""),
+            "音频模式": str(音频模式 or ""),
         }
         t0 = time.time()
         try:
