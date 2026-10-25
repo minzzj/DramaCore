@@ -1,5 +1,7 @@
 # 剧核 DramaCore（Better ComfyUI）
 
+**Language** · **简体中文** | [English](README_EN.md)
+
 > **剧本进，成片出。** 一个 ComfyUI 大节点完成：剧本 → 提示词 → 素材 → H3 导演台 → 审核 → 剪辑成片。
 > 许可 **CC BY-NC-SA 4.0**：可下载、可修改、可非商业再分发；**禁止商用**；修改后必须同许可开源。
 
