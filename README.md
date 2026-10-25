@@ -72,6 +72,13 @@ powershell -ExecutionPolicy Bypass -File .\install\install_windows.ps1 -Mode att
 
 > 完整说明见 [`docs/工作流说明_完整工作流.md`](docs/工作流说明_完整工作流.md)。
 
+### 实验版工作流（可选 · 公测）
+
+> ⚠️ 实验版用于验证「2×15s / 纯 t2v / 无素材图 / 单次封装」的高质量方案，**不是默认稳定版**。
+> 文件：`bettercomfyui_comfy/workflows/【实验版】剧核_单节点_高效画质_2x15s_20261025.json`
+> 如果报错或效果回退：**直接重新打开稳定版工作流**（旧文件未改动），无需卸载。
+> 说明：[docs/实验版_高效画质工作流.md](docs/实验版_高效画质工作流.md)
+
 ## 自定义风格（必须修改！）
 
 **默认风格是示例，请按你的项目自行修改或替换：**
@@ -105,6 +112,11 @@ powershell -ExecutionPolicy Bypass -File .\install\install_windows.ps1 -Mode att
 ![导演台 / V3 提示词面板](docs/images/director-panel-v3.png)
 
 ![GitHub 仓库主页](docs/images/repo-main.png)
+
+## 宣传片
+
+- 🎬 **成片帧版（推荐，48 秒）**：[BGM 版](https://github.com/minzzj/DramaCore/releases/download/v0.2.0-internal/DramaCore-promo-fast2-48s-bgm.mp4) · [静音版](https://github.com/minzzj/DramaCore/releases/download/v0.2.0-internal/DramaCore-promo-fast2-48s-silent.mp4) · [封面](https://github.com/minzzj/DramaCore/releases/download/v0.2.0-internal/DramaCore-promo-fast2-poster.jpg)
+- 说明：[docs/宣传片_快节奏版.md](docs/宣传片_快节奏版.md)
 
 ## 文档
 
