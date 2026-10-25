@@ -9,6 +9,18 @@
 
 ---
 
+## 版本频道：正式版 / 内测版
+
+| 频道 | 版本 | 用途 | 下载 |
+|---|---|---|---|
+| **正式版（稳定）** | `v0.2.0-internal` | 默认使用；昨晚已测试通过的稳定链路 | [正式版 ZIP](https://github.com/minzzj/DramaCore/releases/download/v0.2.0-internal/DramaCore-v0.2.0-internal.zip) |
+| **内测版（公测）** | `v0.3.0-beta.1` | 更快 + 效果更好的新链路；**可能不稳定** | [内测版 ZIP](https://github.com/minzzj/DramaCore/releases/download/v0.3.0-beta.1/DramaCore-v0.3.0-beta.1.zip) |
+
+- 正式版工作流：`【新版】…真实参数版` / `…快速4步版`（根目录 `bettercomfyui_comfy/workflows/`）
+- 内测版工作流：`beta/workflows/内测版_高质量_2x15s.json` / `内测版_极速_2x10s.json`
+- 切换：装同一个插件目录即可；打开哪套工作流就是哪个版本。内测报错时重新打开正式版工作流即可回退，**不要删正式版文件**。
+- 详细说明：[docs/双版本_正式版与内测版.md](docs/双版本_正式版与内测版.md)
+
 ## 核心变化（v0.2.0-internal）
 
 - **系统提示词 V3.0「契约对齐」**：`h3_v3_contract` 作为唯一系统提示词（37,457 字），不再自动追加旧规则块；
@@ -72,12 +84,12 @@ powershell -ExecutionPolicy Bypass -File .\install\install_windows.ps1 -Mode att
 
 > 完整说明见 [`docs/工作流说明_完整工作流.md`](docs/工作流说明_完整工作流.md)。
 
-### 实验版工作流（可选 · 公测）
+### 内测版工作流（公测）
 
-> ⚠️ 实验版用于验证「2×15s / 纯 t2v / 无素材图 / 单次封装」的高质量方案，**不是默认稳定版**。
-> 文件：`bettercomfyui_comfy/workflows/【实验版】剧核_单节点_高效画质_2x15s_20261025.json`
-> 如果报错或效果回退：**直接重新打开稳定版工作流**（旧文件未改动），无需卸载。
-> 说明：[docs/实验版_高效画质工作流.md](docs/实验版_高效画质工作流.md)
+> ⚠️ 内测版用于验证「更快 + 效果更好」的新链路，**不是默认稳定版**。
+> 文件：`beta/workflows/内测版_高质量_2x15s.json`、`beta/workflows/内测版_极速_2x10s.json`
+> 如果报错或效果回退：**直接重新打开正式版工作流**（旧文件未改动），无需卸载。
+> 说明：[beta/README.md](beta/README.md)
 
 ## 自定义风格（必须修改！）
 
