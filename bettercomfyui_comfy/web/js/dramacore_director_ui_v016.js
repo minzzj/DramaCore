@@ -3529,12 +3529,20 @@ registerDirectorUIExtension();
 
   //: 旧工作流里的 combo 值（如已被删除的旧选项名）→ 就近匹配到当前选项，自动修复而不是弹横幅。
   //: 这样浏览器「最近打开」恢复的旧图、或缓存的旧页面，也不会再报「参数与插件节点不一致」。
+  //: 绝不能被“就近匹配”静默替换的控件：模型文件名、API Key 等。
+  const NEVER_HEAL = new Set(["视频UNET","CLIP名","视频VAE","音频VAE","视频LoRA","api_key","model","api_base","系统提示词选择"]);
   function healComboValues(node) {
     const natives = nativeWidgets(node);
     let healed = 0;
     for (const w of natives) {
       const vals = w.options && w.options.values;
       if (!Array.isArray(vals) || !vals.length) continue;
+      if (NEVER_HEAL.has(String(w && w.name || ""))) {
+        if (!vals.includes(w.value)) {
+          console.warn("[剧核/DramaCore] SchemaGuard：控件 " + w.name + " 的值不再当前选项内，已保留原值未自动替换（请手动选择模型/确认 Key）。", w.value);
+        }
+        continue;
+      }
       if (vals.includes(w.value)) continue;
       const s = String(w.value == null ? "" : w.value);
       let target = null;
