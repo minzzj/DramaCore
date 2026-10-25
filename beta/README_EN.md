@@ -23,6 +23,8 @@
 | `workflows/内测版_极速_2x10s.json` | 2×10s ≈ 20s | Speed first |
 
 Shared: t2v / asset generation off / 1376×768 / 8 steps / 24fps / no transitions / no subtitles / auto-rework off / Refine off.
+
+**Long-segment capability**: for fixed segments ≥10s, 2–3 shots within a segment are allowed (`[Shot N] At 00:SS.mmm`), up to 360 words; contract synchronized.
 After installing the Beta ZIP, the 【内测版】 workflows also appear in the ComfyUI workflow menu.
 
 ## Install
