@@ -1,5 +1,7 @@
 # 内测版（公测）· 剧核 DramaCore
 
+> **Language** · **简体中文** | [English](README_EN.md)
+
 > ⚠️ **内测版不是正式版**，可能不稳定，请勿直接用于正式交付。
 > 正式版（稳定）：见仓库根目录 / Release [v0.2.0-internal](https://github.com/minzzj/DramaCore/releases/tag/v0.2.0-internal)。
 
